@@ -1,13 +1,16 @@
 @import "tailwindcss";
 
 /* =====================================================================
-   Tema Lava Thru (provisório — trocar pelas cores oficiais na Fase 6)
+   Identidade visual Lava Thru Car Wash (paleta oficial da marca)
+     Laranja    #F54F03  (Pantone Orange 021 C)  — ação / destaque
+     Azul escuro#0D1D60  (Pantone 2757 C)        — estrutura / fundo
+     Azul claro #61B1DF  (Pantone 2915 C)        — apoio / informação
    ===================================================================== */
 @theme {
-  --color-brand: #0057d9;        /* azul principal */
-  --color-brand-dark: #0a2540;   /* navy p/ sidebar/cabeçalhos */
-  --color-brand-light: #e8f1ff;  /* fundo suave */
-  --color-accent: #06b6d4;       /* ciano (água) */
+  --color-brand: #f54f03;        /* laranja — botões e itens ativos */
+  --color-brand-dark: #0d1d60;   /* navy — sidebar, login, títulos */
+  --color-brand-light: #eef4fb;  /* fundo suave azulado */
+  --color-sky: #61b1df;          /* azul claro — apoio */
   --color-surface: #ffffff;
   --color-muted: #f1f5f9;
   --color-danger: #dc2626;

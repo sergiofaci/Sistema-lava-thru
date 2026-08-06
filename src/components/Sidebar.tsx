@@ -71,11 +71,9 @@ export function Sidebar({ papel }: { papel: Papel }) {
   const pathname = usePathname()
   return (
     <aside className="hidden w-64 shrink-0 flex-col bg-brand-dark px-4 py-6 md:flex">
-      <div className="mb-8 flex items-center gap-2 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-sm font-black text-white">
-          LT
-        </div>
-        <span className="font-bold text-white">Lava Thru</span>
+      <div className="mb-8 flex justify-center px-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/logo-vertical.svg" alt="Lava Thru Car Wash" className="w-28" />
       </div>
       <div className="flex-1 overflow-y-auto">
         <Grupo itens={ITENS} papel={papel} pathname={pathname} />
