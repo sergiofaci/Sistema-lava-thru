@@ -49,6 +49,25 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
   const unidade_id = usuario.papel === 'admin' ? data.unidade_id : usuario.unidade_id
   if (!unidade_id) return { ok: false, erro: 'Selecione a unidade do fechamento.' }
 
+  const supabase = await createClient()
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const turnoLabel = data.turno === 'manha' ? 'manhã' : 'tarde'
+
+  // Regra: apenas 1 fechamento por turno, por dia, por unidade.
+  const { data: existente } = await supabase
+    .from('fechamentos_caixa')
+    .select('id')
+    .eq('unidade_id', unidade_id)
+    .eq('data', hoje)
+    .eq('turno', data.turno)
+    .maybeSingle()
+  if (existente) {
+    return {
+      ok: false,
+      erro: `Já existe um fechamento do turno da ${turnoLabel} nesta unidade hoje.`,
+    }
+  }
+
   // Diferenças recalculadas no servidor (máquina - sistema).
   const diferenca_pix = round2(data.maquina.pix - data.sistema.pix)
   const diferenca_credito = round2(data.maquina.credito - data.sistema.credito)
@@ -63,13 +82,12 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
     return { ok: false, precisaConfirmar: true, diferenca: diferenca_total }
   }
 
-  const supabase = await createClient()
-
   const { data: fech, error } = await supabase
     .from('fechamentos_caixa')
     .insert({
       unidade_id,
       usuario_id: usuario.id,
+      data: hoje,
       turno: data.turno,
       maquina_cartao: data.maquina_cartao,
       maquina_pix: data.maquina.pix,
@@ -95,6 +113,13 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
     .single()
 
   if (error || !fech) {
+    // 23505 = violação de unicidade (corrida: alguém fechou o mesmo turno agora)
+    if (error?.code === '23505') {
+      return {
+        ok: false,
+        erro: `Já existe um fechamento do turno da ${turnoLabel} nesta unidade hoje.`,
+      }
+    }
     return { ok: false, erro: 'Falha ao salvar o fechamento: ' + (error?.message ?? '') }
   }
 

@@ -115,7 +115,10 @@ create table if not exists public.fechamentos_caixa (
   diferenca_total   numeric(12,2) not null default 0,
   fechado_com_diferenca boolean not null default false,
 
-  criado_em     timestamptz not null default now()
+  criado_em     timestamptz not null default now(),
+
+  -- Apenas 1 fechamento por turno, por dia, por unidade
+  constraint fech_unico_por_turno unique (unidade_id, data, turno)
 );
 
 create table if not exists public.fechamento_lavagens (
