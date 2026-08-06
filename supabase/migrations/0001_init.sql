@@ -56,8 +56,7 @@ create table if not exists public.tipos_despesa (
 create table if not exists public.tipos_lavagem (
   id          uuid primary key default gen_random_uuid(),
   nome        text not null,
-  preco       numeric(12,2) not null default 0,   -- usado p/ faturamento por tipo
-  ordem       int not null default 0,
+  ordem       int not null default 0,   -- só p/ ordenar na tela de fechamento
   ativo       boolean not null default true,
   criado_em   timestamptz not null default now()
 );

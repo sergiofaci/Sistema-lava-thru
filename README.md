@@ -13,6 +13,7 @@ Multiunidade desde o início, com login individual e controle de acesso por pape
 | Fase | Módulo | Status |
 |---|---|---|
 | 1 | Autenticação + cadastros base (unidades, usuários, tipos de lavagem, centros de custo, tipos de despesa, produtos, locais de uso) | ✅ **Pronto** |
+| — | *Faturamento por tipo de lavagem não faz parte do escopo atual — o fechamento registra apenas a quantidade por tipo.* | |
 | 2 | Fechamento de caixa (comparação máquina × sistema, alerta de diferença, lavagens por tipo) | ⏳ |
 | 3 | Contas a pagar | ⏳ |
 | 4 | Estoque e consumo | ⏳ |

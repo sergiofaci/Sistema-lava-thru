@@ -4,9 +4,9 @@
 -- via nome único emulado). Ajuste preços dos tipos de lavagem conforme a tabela real.
 -- =====================================================================
 
--- Tipos de lavagem (seção 4.3). Preço 0 = ajustar no cadastro depois.
-insert into public.tipos_lavagem (nome, ordem, preco)
-select v.nome, v.ordem, 0
+-- Tipos de lavagem (seção 4.3) — apenas nome e ordem de exibição.
+insert into public.tipos_lavagem (nome, ordem)
+select v.nome, v.ordem
 from (values
   ('Essencial', 1),
   ('Premium', 2),

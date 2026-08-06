@@ -12,19 +12,13 @@ import {
 } from '@/components/ui'
 
 const ROTA = '/cadastros/tipos-lavagem'
-const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-
-function parseValor(v: FormDataEntryValue | null): number {
-  const n = Number(String(v ?? '0').replace(/\./g, '').replace(',', '.'))
-  return Number.isFinite(n) ? n : 0
-}
 
 export default async function Page() {
   await requirePapel('admin')
   const supabase = await createClient()
   const { data } = await supabase
     .from('tipos_lavagem')
-    .select('id, nome, preco, ordem, ativo')
+    .select('id, nome, ordem, ativo')
     .order('ordem')
 
   async function criar(formData: FormData) {
@@ -32,20 +26,9 @@ export default async function Page() {
     await requirePapel('admin')
     const nome = String(formData.get('nome') ?? '').trim()
     if (!nome) return
-    const preco = parseValor(formData.get('preco'))
     const ordem = Number(formData.get('ordem') ?? 0) || 0
     const s = await createClient()
-    await s.from('tipos_lavagem').insert({ nome, preco, ordem })
-    revalidatePath(ROTA)
-  }
-
-  async function atualizarPreco(formData: FormData) {
-    'use server'
-    await requirePapel('admin')
-    const id = String(formData.get('id'))
-    const preco = parseValor(formData.get('preco'))
-    const s = await createClient()
-    await s.from('tipos_lavagem').update({ preco }).eq('id', id)
+    await s.from('tipos_lavagem').insert({ nome, ordem })
     revalidatePath(ROTA)
   }
 
@@ -63,7 +46,7 @@ export default async function Page() {
     <div className="max-w-3xl">
       <PageHeader
         titulo="Tipos de Lavagem"
-        descricao="Serviços oferecidos. O preço alimenta o faturamento por tipo no dashboard."
+        descricao="Serviços registrados por quantidade no fechamento de caixa."
       />
 
       <Card className="mb-6">
@@ -73,13 +56,8 @@ export default async function Page() {
               <input id="nome" name="nome" required placeholder="Ex.: Premium" className={inputClass} />
             </Field>
           </div>
-          <div className="w-32">
-            <Field label="Preço (R$)" htmlFor="preco">
-              <input id="preco" name="preco" inputMode="decimal" placeholder="0,00" className={inputClass} />
-            </Field>
-          </div>
-          <div className="w-20">
-            <Field label="Ordem" htmlFor="ordem">
+          <div className="w-24">
+            <Field label="Ordem" htmlFor="ordem" hint="Exibição">
               <input id="ordem" name="ordem" type="number" defaultValue={0} className={inputClass} />
             </Field>
           </div>
@@ -97,7 +75,6 @@ export default async function Page() {
             <thead>
               <tr className="border-b border-slate-200 text-left text-slate-500">
                 <th className="px-5 py-3 font-medium">Serviço</th>
-                <th className="px-5 py-3 font-medium">Preço</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3" />
               </tr>
@@ -106,21 +83,6 @@ export default async function Page() {
               {data.map((t) => (
                 <tr key={t.id} className="border-b border-slate-100 last:border-0">
                   <td className="px-5 py-3 font-medium text-slate-700">{t.nome}</td>
-                  <td className="px-5 py-3">
-                    <form action={atualizarPreco} className="flex items-center gap-2">
-                      <input type="hidden" name="id" value={t.id} />
-                      <span className="text-slate-400">R$</span>
-                      <input
-                        name="preco"
-                        inputMode="decimal"
-                        defaultValue={BRL.format(t.preco).replace('R$', '').trim()}
-                        className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                      />
-                      <button type="submit" className="text-xs text-brand hover:underline">
-                        Salvar
-                      </button>
-                    </form>
-                  </td>
                   <td className="px-5 py-3">
                     {t.ativo ? <Badge tone="success">Ativo</Badge> : <Badge>Inativo</Badge>}
                   </td>
