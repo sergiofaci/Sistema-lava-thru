@@ -33,6 +33,13 @@ export const ORIGENS_PAGAMENTO = [
 
 export const MAQUINAS_CARTAO = ['Rede Card', 'Sipag'] as const
 
+// Fechamento é feito 2x ao dia (fim do turno da manhã e da tarde)
+export type Turno = 'manha' | 'tarde'
+export const TURNO_LABEL: Record<Turno, string> = {
+  manha: 'Manhã',
+  tarde: 'Tarde',
+}
+
 export function podeGerenciarCadastros(papel: Papel) {
   return papel === 'admin'
 }

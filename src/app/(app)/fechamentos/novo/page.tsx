@@ -25,6 +25,16 @@ export default async function NovoFechamentoPage() {
     unidades = data ?? []
   }
 
+  // Sugere o turno pelo horário atual (manhã até 14h, tarde depois).
+  const horaSP = Number(
+    new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      hour12: false,
+    }).format(new Date()),
+  )
+  const turnoPadrao: 'manha' | 'tarde' = horaSP < 14 ? 'manha' : 'tarde'
+
   return (
     <div>
       <PageHeader
@@ -40,6 +50,7 @@ export default async function NovoFechamentoPage() {
         tipos={tipos ?? []}
         unidades={unidades}
         unidadeFixaNome={usuario.unidade?.nome ?? '—'}
+        turnoPadrao={turnoPadrao}
       />
     </div>
   )

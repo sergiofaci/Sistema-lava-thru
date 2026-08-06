@@ -4,6 +4,7 @@ import { requireUsuario } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, Badge } from '@/components/ui'
 import { formatBRL } from '@/lib/money'
+import { TURNO_LABEL, type Turno } from '@/lib/types'
 
 const dtFmt = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -62,7 +63,7 @@ export default async function DetalheFechamento({
     <div className="max-w-4xl">
       <PageHeader
         titulo="Fechamento de Caixa"
-        descricao={`${rel(f.unidade)} · ${dtFmt.format(new Date(f.data_hora))}`}
+        descricao={`${rel(f.unidade)} · Turno ${TURNO_LABEL[f.turno as Turno] ?? f.turno} · ${dtFmt.format(new Date(f.data_hora))}`}
         acao={
           <Link href="/fechamentos" className="text-sm text-brand hover:underline">
             ← Voltar

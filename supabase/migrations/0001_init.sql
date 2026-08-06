@@ -86,6 +86,7 @@ create table if not exists public.fechamentos_caixa (
   usuario_id    uuid not null references public.usuarios(id),
   data          date not null default (now() at time zone 'America/Sao_Paulo')::date,
   data_hora     timestamptz not null default now(),
+  turno         text not null check (turno in ('manha','tarde')),  -- 2 fechamentos/dia
   maquina_cartao text not null check (maquina_cartao in ('Rede Card','Sipag')),
 
   -- Bloco A — relatório da maquininha

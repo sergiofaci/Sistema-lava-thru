@@ -22,12 +22,15 @@ export function FechamentoForm({
   tipos,
   unidades,
   unidadeFixaNome,
+  turnoPadrao,
 }: {
   tipos: Tipo[]
   unidades: Unidade[] | null // preenchido só para admin
   unidadeFixaNome?: string
+  turnoPadrao: 'manha' | 'tarde'
 }) {
   const [maquinaCartao, setMaquinaCartao] = useState<'Rede Card' | 'Sipag'>('Rede Card')
+  const [turno, setTurno] = useState<'manha' | 'tarde'>(turnoPadrao)
   const [unidadeId, setUnidadeId] = useState('')
 
   // Bloco A (máquina) e Bloco B (sistema) — valores como texto
@@ -51,6 +54,7 @@ export function FechamentoForm({
   function montarPayload(confirmado: boolean) {
     return {
       unidade_id: unidades ? unidadeId || undefined : undefined,
+      turno,
       maquina_cartao: maquinaCartao,
       maquina: { pix: parseBRL(a.pix), credito: parseBRL(a.credito), debito: parseBRL(a.debito) },
       sistema: {
@@ -109,9 +113,9 @@ export function FechamentoForm({
 
   return (
     <div className="max-w-4xl space-y-6">
-      {/* Cabeçalho: unidade + máquina */}
+      {/* Cabeçalho: unidade + turno + máquina */}
       <Card>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {unidades ? (
             <Field label="Unidade" htmlFor="unidade">
               <select
@@ -135,6 +139,17 @@ export function FechamentoForm({
               </div>
             </Field>
           )}
+          <Field label="Turno" htmlFor="turno">
+            <select
+              id="turno"
+              className={inputClass}
+              value={turno}
+              onChange={(e) => setTurno(e.target.value as 'manha' | 'tarde')}
+            >
+              <option value="manha">Manhã</option>
+              <option value="tarde">Tarde</option>
+            </select>
+          </Field>
           <Field label="Máquina de cartão" htmlFor="maquina">
             <select
               id="maquina"

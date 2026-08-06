@@ -11,6 +11,7 @@ const Qtd = z.number().int().nonnegative().default(0)
 
 const schema = z.object({
   unidade_id: z.string().uuid().optional(),
+  turno: z.enum(['manha', 'tarde']),
   maquina_cartao: z.enum(['Rede Card', 'Sipag']),
   maquina: z.object({ pix: Valor, credito: Valor, debito: Valor }),
   sistema: z.object({
@@ -69,6 +70,7 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
     .insert({
       unidade_id,
       usuario_id: usuario.id,
+      turno: data.turno,
       maquina_cartao: data.maquina_cartao,
       maquina_pix: data.maquina.pix,
       maquina_credito: data.maquina.credito,

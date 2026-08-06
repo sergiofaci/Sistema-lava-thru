@@ -3,11 +3,13 @@ import { requireUsuario } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
+import { TURNO_LABEL, type Turno } from '@/lib/types'
 
 type Row = {
   id: string
   data: string
   data_hora: string
+  turno: Turno
   maquina_cartao: string
   sistema_dinheiro: number
   sistema_pix: number
@@ -40,7 +42,7 @@ export default async function FechamentosPage() {
   const { data } = await supabase
     .from('fechamentos_caixa')
     .select(
-      'id, data, data_hora, maquina_cartao, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, diferenca_total, fechado_com_diferenca, unidade:unidades(nome), usuario:usuarios(nome)',
+      'id, data, data_hora, turno, maquina_cartao, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, diferenca_total, fechado_com_diferenca, unidade:unidades(nome), usuario:usuarios(nome)',
     )
     .order('data_hora', { ascending: false })
     .limit(60)
@@ -72,6 +74,7 @@ export default async function FechamentosPage() {
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">
                   <th className="px-5 py-3 font-medium">Data</th>
+                  <th className="px-5 py-3 font-medium">Turno</th>
                   <th className="px-5 py-3 font-medium">Unidade</th>
                   <th className="px-5 py-3 font-medium">Colaborador</th>
                   <th className="px-5 py-3 font-medium">Máquina</th>
@@ -85,6 +88,11 @@ export default async function FechamentosPage() {
                   <tr key={f.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-3 text-slate-700">
                       {dataFmt.format(new Date(f.data_hora))}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge tone={f.turno === 'manha' ? 'warning' : 'neutral'}>
+                        {TURNO_LABEL[f.turno] ?? f.turno}
+                      </Badge>
                     </td>
                     <td className="px-5 py-3 text-slate-600">{nome(f.unidade)}</td>
                     <td className="px-5 py-3 text-slate-600">{nome(f.usuario)}</td>
