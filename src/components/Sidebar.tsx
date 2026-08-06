@@ -12,6 +12,7 @@ type Item = {
 
 const ITENS: Item[] = [
   { href: '/', label: 'Dashboard', papeis: ['admin', 'gerente'] },
+  { href: '/dre', label: 'DRE / Resultado', papeis: ['admin', 'gerente'] },
   { href: '/fechamentos', label: 'Fechamento de Caixa', papeis: ['admin', 'gerente', 'caixa'] },
   { href: '/contas', label: 'Contas a Pagar', papeis: ['admin', 'gerente'] },
   { href: '/estoque', label: 'Estoque e Consumo', papeis: ['admin', 'gerente'] },
