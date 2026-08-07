@@ -23,20 +23,26 @@ export function FechamentoForm({
   unidades,
   unidadeFixaNome,
   turnoPadrao,
+  isAdmin = false,
+  hoje,
 }: {
   tipos: Tipo[]
   unidades: Unidade[] | null // preenchido só para admin
   unidadeFixaNome?: string
   turnoPadrao: 'manha' | 'tarde'
+  isAdmin?: boolean
+  hoje: string
 }) {
   const [maquinaCartao, setMaquinaCartao] = useState<'Rede Card' | 'Sipag'>('Rede Card')
   const [turno, setTurno] = useState<'manha' | 'tarde'>(turnoPadrao)
   const [unidadeId, setUnidadeId] = useState('')
+  const [dataFech, setDataFech] = useState(hoje) // admin pode lançar retroativo
 
   // Bloco A (máquina) e Bloco B (sistema) — valores como texto
   const [a, setA] = useState({ pix: '', credito: '', debito: '' })
-  const [b, setB] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '' })
-  const [q, setQ] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '' })
+  const [b, setB] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '', empresarial: '' })
+  const [q, setQ] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '', empresarial: '' })
+  const [kits, setKits] = useState('')
   const [lav, setLav] = useState<Record<string, string>>({})
 
   const [modal, setModal] = useState<{ diferenca: number } | null>(null)
@@ -54,6 +60,7 @@ export function FechamentoForm({
   function montarPayload(confirmado: boolean) {
     return {
       unidade_id: unidades ? unidadeId || undefined : undefined,
+      data: isAdmin ? dataFech : undefined,
       turno,
       maquina_cartao: maquinaCartao,
       maquina: { pix: parseBRL(a.pix), credito: parseBRL(a.credito), debito: parseBRL(a.debito) },
@@ -63,6 +70,7 @@ export function FechamentoForm({
         credito: parseBRL(b.credito),
         debito: parseBRL(b.debito),
         voucher: parseBRL(b.voucher),
+        empresarial: parseBRL(b.empresarial),
       },
       qtd: {
         dinheiro: toInt(q.dinheiro),
@@ -70,7 +78,9 @@ export function FechamentoForm({
         credito: toInt(q.credito),
         debito: toInt(q.debito),
         voucher: toInt(q.voucher),
+        empresarial: toInt(q.empresarial),
       },
+      kits: toInt(kits),
       lavagens: Object.fromEntries(tipos.map((t) => [t.id, toInt(lav[t.id] ?? '')])),
       confirmado_com_diferenca: confirmado,
     }
@@ -108,14 +118,15 @@ export function FechamentoForm({
       parseBRL(b.pix) +
       parseBRL(b.credito) +
       parseBRL(b.debito) +
-      parseBRL(b.voucher),
+      parseBRL(b.voucher) +
+      parseBRL(b.empresarial),
   )
 
   return (
     <div className="max-w-4xl space-y-6">
-      {/* Cabeçalho: unidade + turno + máquina */}
+      {/* Cabeçalho: unidade + data + turno + máquina */}
       <Card>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {unidades ? (
             <Field label="Unidade" htmlFor="unidade">
               <select
@@ -137,6 +148,18 @@ export function FechamentoForm({
               <div className="rounded-lg bg-muted px-3 py-2 text-sm text-slate-600">
                 {unidadeFixaNome}
               </div>
+            </Field>
+          )}
+          {isAdmin && (
+            <Field label="Data do fechamento" htmlFor="dataFech" hint="Admin pode lançar retroativo">
+              <input
+                id="dataFech"
+                type="date"
+                max={hoje}
+                className={inputClass}
+                value={dataFech}
+                onChange={(e) => setDataFech(e.target.value)}
+              />
             </Field>
           )}
           <Field label="Turno" htmlFor="turno">
@@ -228,6 +251,13 @@ export function FechamentoForm({
                 q={q.voucher}
                 onQ={(v) => setQ({ ...q, voucher: v })}
               />
+              <LinhaSemMaquina
+                nome="Empresarial a Prazo"
+                valor={b.empresarial}
+                onValor={(v) => setB({ ...b, empresarial: v })}
+                q={q.empresarial}
+                onQ={(v) => setQ({ ...q, empresarial: v })}
+              />
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-200 bg-slate-50 font-medium">
@@ -270,6 +300,21 @@ export function FechamentoForm({
               />
             </div>
           ))}
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-light/40 px-3 py-2 sm:max-w-xs">
+          <label htmlFor="kits" className="text-sm font-medium text-brand-dark">
+            Kits vendidos
+          </label>
+          <input
+            id="kits"
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={kits}
+            onChange={(e) => setKits(e.target.value)}
+            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+            placeholder="0"
+          />
         </div>
       </Card>
 

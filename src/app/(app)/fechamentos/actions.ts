@@ -11,6 +11,7 @@ const Qtd = z.number().int().nonnegative().default(0)
 
 const schema = z.object({
   unidade_id: z.string().uuid().optional(),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // retroativo (só admin)
   turno: z.enum(['manha', 'tarde']),
   maquina_cartao: z.enum(['Rede Card', 'Sipag']),
   maquina: z.object({ pix: Valor, credito: Valor, debito: Valor }),
@@ -20,6 +21,7 @@ const schema = z.object({
     credito: Valor,
     debito: Valor,
     voucher: Valor,
+    empresarial: Valor,
   }),
   qtd: z.object({
     dinheiro: Qtd,
@@ -27,7 +29,9 @@ const schema = z.object({
     credito: Qtd,
     debito: Qtd,
     voucher: Qtd,
+    empresarial: Qtd,
   }),
+  kits: Qtd,
   lavagens: z.record(z.string().uuid(), Qtd),
   confirmado_com_diferenca: z.boolean().default(false),
 })
@@ -53,18 +57,22 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
   const turnoLabel = data.turno === 'manha' ? 'manhã' : 'tarde'
 
+  // Data do fechamento: hoje por padrão; admin pode lançar retroativo.
+  const dataFech = usuario.papel === 'admin' && data.data ? data.data : hoje
+  if (dataFech > hoje) return { ok: false, erro: 'A data do fechamento não pode ser futura.' }
+
   // Regra: apenas 1 fechamento por turno, por dia, por unidade.
   const { data: existente } = await supabase
     .from('fechamentos_caixa')
     .select('id')
     .eq('unidade_id', unidade_id)
-    .eq('data', hoje)
+    .eq('data', dataFech)
     .eq('turno', data.turno)
     .maybeSingle()
   if (existente) {
     return {
       ok: false,
-      erro: `Já existe um fechamento do turno da ${turnoLabel} nesta unidade hoje.`,
+      erro: `Já existe um fechamento do turno da ${turnoLabel} nesta unidade em ${dataFech.split('-').reverse().join('/')}.`,
     }
   }
 
@@ -87,7 +95,7 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
     .insert({
       unidade_id,
       usuario_id: usuario.id,
-      data: hoje,
+      data: dataFech,
       turno: data.turno,
       maquina_cartao: data.maquina_cartao,
       maquina_pix: data.maquina.pix,
@@ -98,11 +106,14 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
       sistema_credito: data.sistema.credito,
       sistema_debito: data.sistema.debito,
       sistema_voucher: data.sistema.voucher,
+      sistema_empresarial: data.sistema.empresarial,
       sistema_qtd_dinheiro: data.qtd.dinheiro,
       sistema_qtd_pix: data.qtd.pix,
       sistema_qtd_credito: data.qtd.credito,
       sistema_qtd_debito: data.qtd.debito,
       sistema_qtd_voucher: data.qtd.voucher,
+      sistema_qtd_empresarial: data.qtd.empresarial,
+      kits_vendidos: data.kits,
       diferenca_pix,
       diferenca_credito,
       diferenca_debito,

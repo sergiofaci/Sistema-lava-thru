@@ -16,6 +16,7 @@ type Row = {
   sistema_credito: number
   sistema_debito: number
   sistema_voucher: number
+  sistema_empresarial: number
   diferenca_total: number
   fechado_com_diferenca: boolean
   unidade: { nome: string } | { nome: string }[] | null
@@ -29,11 +30,19 @@ function nome(rel: Row['unidade']): string {
 
 function totalSistema(r: Row): number {
   return round2(
-    r.sistema_dinheiro + r.sistema_pix + r.sistema_credito + r.sistema_debito + r.sistema_voucher,
+    r.sistema_dinheiro +
+      r.sistema_pix +
+      r.sistema_credito +
+      r.sistema_debito +
+      r.sistema_voucher +
+      (r.sistema_empresarial ?? 0),
   )
 }
 
-const dataFmt = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function dataBR(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
 
 export default async function FechamentosPage() {
   await requireUsuario()
@@ -42,8 +51,9 @@ export default async function FechamentosPage() {
   const { data } = await supabase
     .from('fechamentos_caixa')
     .select(
-      'id, data, data_hora, turno, maquina_cartao, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, diferenca_total, fechado_com_diferenca, unidade:unidades(nome), usuario:usuarios(nome)',
+      'id, data, data_hora, turno, maquina_cartao, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, diferenca_total, fechado_com_diferenca, unidade:unidades(nome), usuario:usuarios(nome)',
     )
+    .order('data', { ascending: false })
     .order('data_hora', { ascending: false })
     .limit(60)
 
@@ -86,9 +96,7 @@ export default async function FechamentosPage() {
               <tbody>
                 {fechamentos.map((f) => (
                   <tr key={f.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-5 py-3 text-slate-700">
-                      {dataFmt.format(new Date(f.data_hora))}
-                    </td>
+                    <td className="px-5 py-3 text-slate-700">{dataBR(f.data)}</td>
                     <td className="px-5 py-3">
                       <Badge tone={f.turno === 'manha' ? 'warning' : 'neutral'}>
                         {TURNO_LABEL[f.turno] ?? f.turno}

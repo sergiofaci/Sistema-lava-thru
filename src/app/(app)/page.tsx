@@ -19,6 +19,7 @@ const FORMAS = [
   { key: 'sistema_credito', nome: 'Crédito' },
   { key: 'sistema_debito', nome: 'Débito' },
   { key: 'sistema_voucher', nome: 'Voucher' },
+  { key: 'sistema_empresarial', nome: 'Empresarial a Prazo' },
 ] as const
 
 type FechRow = {
@@ -27,12 +28,18 @@ type FechRow = {
   sistema_credito: number
   sistema_debito: number
   sistema_voucher: number
+  sistema_empresarial: number
   lavagens?: { quantidade: number; tipo_lavagem_id: string }[]
 }
 
 function faturamento(r: FechRow): number {
   return (
-    r.sistema_dinheiro + r.sistema_pix + r.sistema_credito + r.sistema_debito + r.sistema_voucher
+    r.sistema_dinheiro +
+    r.sistema_pix +
+    r.sistema_credito +
+    r.sistema_debito +
+    r.sistema_voucher +
+    (r.sistema_empresarial ?? 0)
   )
 }
 function somaFat(rows: FechRow[]): number {
@@ -64,7 +71,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   const selFech =
-    'sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, lavagens:fechamento_lavagens(quantidade, tipo_lavagem_id)'
+    'sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, lavagens:fechamento_lavagens(quantidade, tipo_lavagem_id)'
 
   const [
     { data: tiposLav },
@@ -81,7 +88,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     aplicarUnidade(
       supabase
         .from('fechamentos_caixa')
-        .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher')
+        .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
         .gte('data', prevInicio)
         .lte('data', prevFim),
     ),

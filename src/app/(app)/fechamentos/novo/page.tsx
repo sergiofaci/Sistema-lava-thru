@@ -51,6 +51,8 @@ export default async function NovoFechamentoPage() {
         unidades={unidades}
         unidadeFixaNome={usuario.unidade?.nome ?? '—'}
         turnoPadrao={turnoPadrao}
+        isAdmin={usuario.papel === 'admin'}
+        hoje={new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())}
       />
     </div>
   )

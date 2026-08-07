@@ -45,10 +45,16 @@ export default async function DetalheFechamento({
     { nome: 'Crédito', maq: f.maquina_credito, sis: f.sistema_credito, q: f.sistema_qtd_credito, dif: f.diferenca_credito },
     { nome: 'Débito', maq: f.maquina_debito, sis: f.sistema_debito, q: f.sistema_qtd_debito, dif: f.diferenca_debito },
     { nome: 'Voucher', maq: null, sis: f.sistema_voucher, q: f.sistema_qtd_voucher, dif: null },
+    { nome: 'Empresarial a Prazo', maq: null, sis: f.sistema_empresarial ?? 0, q: f.sistema_qtd_empresarial ?? 0, dif: null },
   ]
 
   const totalSistema =
-    f.sistema_dinheiro + f.sistema_pix + f.sistema_credito + f.sistema_debito + f.sistema_voucher
+    f.sistema_dinheiro +
+    f.sistema_pix +
+    f.sistema_credito +
+    f.sistema_debito +
+    f.sistema_voucher +
+    (f.sistema_empresarial ?? 0)
 
   type Lav = { quantidade: number; tipo: { nome: string; ordem: number } | { nome: string; ordem: number }[] | null }
   const lavagens = ((f.lavagens ?? []) as Lav[])
@@ -128,7 +134,12 @@ export default async function DetalheFechamento({
       </Card>
 
       <Card>
-        <h2 className="mb-3 font-semibold text-brand-dark">Lavagens por tipo</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold text-brand-dark">Lavagens por tipo</h2>
+          <span className="rounded-lg bg-brand-light px-3 py-1 text-sm text-brand-dark">
+            Kits vendidos: <strong>{f.kits_vendidos ?? 0}</strong>
+          </span>
+        </div>
         {lavagens.length === 0 ? (
           <p className="text-sm text-slate-500">Nenhuma lavagem registrada.</p>
         ) : (

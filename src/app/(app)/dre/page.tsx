@@ -18,6 +18,7 @@ const FORMAS = [
   { key: 'sistema_credito', nome: 'Crédito' },
   { key: 'sistema_debito', nome: 'Débito' },
   { key: 'sistema_voucher', nome: 'Voucher' },
+  { key: 'sistema_empresarial', nome: 'Empresarial a Prazo' },
 ] as const
 
 type FechRow = Record<(typeof FORMAS)[number]['key'], number>
