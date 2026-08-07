@@ -10,7 +10,7 @@ export default async function NovoFechamentoPage() {
 
   const { data: tipos } = await supabase
     .from('tipos_lavagem')
-    .select('id, nome')
+    .select('id, nome, categoria')
     .eq('ativo', true)
     .order('ordem')
 

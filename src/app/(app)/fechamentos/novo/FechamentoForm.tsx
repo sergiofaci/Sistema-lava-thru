@@ -5,7 +5,7 @@ import { parseBRL, formatBRL, round2 } from '@/lib/money'
 import { Card, Field, inputClass, btnPrimary, btnGhost } from '@/components/ui'
 import { criarFechamento, type FechamentoResult } from '../actions'
 
-type Tipo = { id: string; nome: string }
+type Tipo = { id: string; nome: string; categoria?: string }
 type Unidade = { id: string; nome: string }
 type Tres = { pix: string; credito: string; debito: string }
 
@@ -250,24 +250,54 @@ export function FechamentoForm({
         <h2 className="mb-1 font-semibold text-brand-dark">Lavagens realizadas no período</h2>
         <p className="mb-4 text-xs text-slate-500">Quantidade por tipo de serviço.</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {tipos.map((t) => (
-            <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
-              <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
-                {t.nome}
-              </label>
-              <input
-                id={`lav-${t.id}`}
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={lav[t.id] ?? ''}
-                onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
-                placeholder="0"
-              />
-            </div>
-          ))}
+          {tipos
+            .filter((t) => t.categoria !== 'servico')
+            .map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
+                  {t.nome}
+                </label>
+                <input
+                  id={`lav-${t.id}`}
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={lav[t.id] ?? ''}
+                  onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
+                  className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                  placeholder="0"
+                />
+              </div>
+            ))}
         </div>
+
+        {tipos.some((t) => t.categoria === 'servico') && (
+          <div className="mt-5">
+            <h3 className="mb-1 text-sm font-semibold text-slate-600">Serviços adicionais</h3>
+            <p className="mb-3 text-xs text-slate-400">Não contam como lavagem nas estatísticas.</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {tipos
+                .filter((t) => t.categoria === 'servico')
+                .map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2">
+                    <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
+                      {t.nome}
+                    </label>
+                    <input
+                      id={`lav-${t.id}`}
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={lav[t.id] ?? ''}
+                      onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
+                      className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
         <div className="mt-4 flex items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-light/40 px-3 py-2 sm:max-w-xs">
           <label htmlFor="kits" className="text-sm font-medium text-brand-dark">
             Kits vendidos

@@ -97,7 +97,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: contasTrendData },
     unidadesRes,
   ] = await Promise.all([
-    supabase.from('tipos_lavagem').select('id, nome, ordem').order('ordem'),
+    supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
     aplicarUnidade(supabase.from('fechamentos_caixa').select(selFech).gte('data', mesInicio).lte('data', mesFim)),
     aplicarUnidade(supabase.from('fechamentos_caixa').select(selFech).eq('data', hoje)),
     aplicarUnidade(
@@ -157,13 +157,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
   const lavDia = contaLav(fechDia)
   const lavMes = contaLav(fechMes)
-  const lavagens = (tiposLav ?? []).map((t) => ({
-    nome: t.nome,
-    dia: lavDia.get(t.id) ?? 0,
-    mes: lavMes.get(t.id) ?? 0,
-  }))
+  type TipoLav = { id: string; nome: string; ordem: number; categoria?: string }
+  const tipos = (tiposLav ?? []) as TipoLav[]
+  const linhaTipo = (t: TipoLav) => ({ nome: t.nome, dia: lavDia.get(t.id) ?? 0, mes: lavMes.get(t.id) ?? 0 })
+  // Serviços adicionais (limpeza interna, box etc.) não contam como lavagem.
+  const lavagens = tipos.filter((t) => t.categoria !== 'servico').map(linhaTipo)
+  const servicos = tipos.filter((t) => t.categoria === 'servico').map(linhaTipo)
   const totalLavDia = lavagens.reduce((s, l) => s + l.dia, 0)
   const totalLavMes = lavagens.reduce((s, l) => s + l.mes, 0)
+  const totalServDia = servicos.reduce((s, l) => s + l.dia, 0)
+  const totalServMes = servicos.reduce((s, l) => s + l.mes, 0)
 
   // Despesas por tipo e por origem (mês)
   const contas = (contasData ?? []) as { valor: number; origem_pagamento: string; tipo: unknown }[]
@@ -304,6 +307,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </tbody>
           </table>
         </Painel>
+
+        {/* Serviços adicionais (não são lavagem) */}
+        {servicos.length > 0 && (
+          <Painel titulo="Serviços adicionais" sub={`Dia: ${totalServDia} · Mês: ${totalServMes} · não contam como lavagem`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="py-2 font-medium">Serviço</th>
+                  <th className="py-2 text-right font-medium">Dia</th>
+                  <th className="py-2 text-right font-medium">Mês</th>
+                </tr>
+              </thead>
+              <tbody>
+                {servicos.map((l) => (
+                  <tr key={l.nome} className="border-b border-slate-100 last:border-0">
+                    <td className="py-2 text-slate-700">{l.nome}</td>
+                    <td className="py-2 text-right text-slate-600">{l.dia}</td>
+                    <td className="py-2 text-right font-medium text-brand-dark">{l.mes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Painel>
+        )}
 
         {/* Despesas por tipo */}
         <Painel titulo="Despesas por tipo" sub="No mês">

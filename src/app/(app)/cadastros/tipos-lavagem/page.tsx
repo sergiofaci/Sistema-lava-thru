@@ -11,14 +11,17 @@ const ROTULO = 'Tipo de lavagem'
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
-  const { data } = await s.from(TABELA).select('id, nome, ordem, ativo').order('ordem')
+  const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, ativo').order('ordem')
+
+  const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico' : 'lavagem')
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
-    const r = await crudInserir(TABELA, { nome, ordem }, ROTULO)
+    const categoria = normCategoria(fd.get('categoria'))
+    const r = await crudInserir(TABELA, { nome, ordem, categoria }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -28,7 +31,8 @@ export default async function Page() {
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
-    const r = await crudAtualizar(TABELA, id, { nome, ordem }, ROTULO)
+    const categoria = normCategoria(fd.get('categoria'))
+    const r = await crudAtualizar(TABELA, id, { nome, ordem, categoria }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -51,6 +55,18 @@ export default async function Page() {
       descricao="Serviços registrados por quantidade no fechamento de caixa."
       fields={[
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Premium' },
+        {
+          name: 'categoria',
+          label: 'Categoria',
+          type: 'select',
+          required: true,
+          defaultValue: 'lavagem',
+          hint: 'Serviço não conta como lavagem',
+          options: [
+            { value: 'lavagem', label: 'Lavagem' },
+            { value: 'servico', label: 'Serviço adicional' },
+          ],
+        },
         { name: 'ordem', label: 'Ordem', type: 'number', defaultValue: 0, hint: 'Exibição' },
       ]}
       itens={data ?? []}

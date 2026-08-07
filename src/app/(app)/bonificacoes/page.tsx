@@ -119,7 +119,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
     supabase
       .from('fechamentos_caixa')
       .select(
-        'turno, usuario_id, kits_vendidos, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, usuario:usuarios(nome), lavagens:fechamento_lavagens(quantidade, tipo:tipos_lavagem(nome))',
+        'turno, usuario_id, kits_vendidos, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, usuario:usuarios(nome), lavagens:fechamento_lavagens(quantidade, tipo:tipos_lavagem(nome, categoria))',
       )
       .eq('unidade_id', unidadeId)
       .gte('data', mesInicio)
@@ -143,6 +143,8 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
   let fatTotal = 0
   const washTotal: Record<string, number> = {}
   const limpezaPorTurno: Record<string, number> = { manha: 0, tarde: 0 }
+  // Nomes classificados como "serviço adicional" (não contam como lavagem).
+  const servicoNames = new Set<string>()
   // Por caixa (usuario_id)
   const porCaixa = new Map<
     string,
@@ -162,6 +164,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
     c.kits += f.kits_vendidos ?? 0
     for (const l of f.lavagens ?? []) {
       const nome = rel(l.tipo)
+      if (rel(l.tipo, 'categoria') === 'servico') servicoNames.add(nome)
       washTotal[nome] = (washTotal[nome] ?? 0) + l.quantidade
       c.wash[nome] = (c.wash[nome] ?? 0) + l.quantidade
       if (nome === LIMPEZA_AVULSA && (f.turno === 'manha' || f.turno === 'tarde'))
@@ -172,7 +175,10 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
 
   const somaWash = (w: Record<string, number>, nomes: string[]) =>
     nomes.reduce((s, n) => s + (w[n] ?? 0), 0)
-  const totalLavagens = Object.values(washTotal).reduce((s, n) => s + n, 0)
+  // Só lavagens de verdade entram na contagem geral e no ticket médio.
+  const ehServico = (nome: string) => servicoNames.has(nome)
+  const totalLavagens = Object.entries(washTotal).reduce((s, [n, q]) => (ehServico(n) ? s : s + q), 0)
+  const servicosTotal = Object.entries(washTotal).reduce((s, [n, q]) => (ehServico(n) ? s + q : s), 0)
   const tunelTotal = somaWash(washTotal, TUNEL)
   const limpezaTotal = washTotal[LIMPEZA_AVULSA] ?? 0
   const kitsTotal = fechs.reduce((s, f) => s + (f.kits_vendidos ?? 0), 0)
@@ -182,7 +188,10 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
     const bonusLavagens = round2(
       Object.entries(CAIXA_RATE).reduce((s, [nome, rate]) => s + (c.wash[nome] ?? 0) * rate, 0),
     )
-    const lavagensTicket = Object.values(c.wash).reduce((s, n) => s + n, 0) - (c.wash[ASSINATURA] ?? 0)
+    const lavagensTicket = Object.entries(c.wash).reduce(
+      (s, [nome, q]) => (ehServico(nome) || nome === ASSINATURA ? s : s + q),
+      0,
+    )
     const ticket = lavagensTicket > 0 ? round2(c.fat / lavagensTicket) : 0
     const bonusTicket = ticketBonus(ticket)
     const bonusKits = c.kits > KIT_MIN ? round2((c.kits - KIT_MIN) * RATE_KIT) : 0
@@ -265,6 +274,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
         <Mini label="Lavagens" valor={String(totalLavagens)} />
         <Mini label="Veículos túnel" valor={String(tunelTotal)} />
         <Mini label="Kits vendidos" valor={String(kitsTotal)} />
+        {servicosTotal > 0 && <Mini label="Serviços adicionais" valor={String(servicosTotal)} />}
       </div>
 
       <div className="mb-6 rounded-xl bg-brand-dark px-5 py-4 text-white">
@@ -375,8 +385,8 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
       <Card className="mt-6 bg-slate-50">
         <p className="text-xs text-slate-500">
           <strong>Como é calculado:</strong> Caixa — Premium R$0,10 / Exclusiva sem Box R$0,20 /
-          Exclusiva com Box R$0,30 por lavagem; ticket médio = faturamento ÷ (lavagens exceto
-          Assinatura Mensal), maior faixa (&gt;57→100, &gt;58→150, &gt;59→200, &gt;60→250); kits =
+          Exclusiva com Box R$0,30 por lavagem; ticket médio = faturamento ÷ (lavagens, exceto
+          Assinatura Mensal e serviços adicionais), maior faixa (&gt;57→100, &gt;58→150, &gt;59→200, &gt;60→250); kits =
           (kits−60)×R$2,50 acima de 60. Aux. Máquina — veículos no túnel (Essencial, Premium,
           Exclusivas e Assinatura) × R$0,35 ÷ nº de colaboradores. Aux. Limpeza — Limpeza Interna
           Avulsa × R$5,00 ÷ colaboradores do turno. Gerente — faturamento total × % por tempo de
