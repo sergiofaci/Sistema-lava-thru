@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary, btnGhost } from '@/components/ui'
 import { formatQtd, formatBRL, round2 } from '@/lib/money'
 import { EstornarMovimento } from './EstornarMovimento'
+import { ZerarEstoque } from './ZerarEstoque'
 
 function rel(r: unknown, campo = 'nome'): string {
   if (!r) return '—'
@@ -112,6 +113,7 @@ export default async function EstoquePage() {
         descricao="Saldo por unidade e movimentações."
         acao={
           <div className="flex flex-wrap gap-2">
+            {isAdmin && <ZerarEstoque />}
             <Link href="/estoque/consumo" className={btnGhost}>
               📊 Consumo por produto
             </Link>
