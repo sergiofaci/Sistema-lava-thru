@@ -15,6 +15,7 @@ export function MovimentoForm({
   locais,
   hoje,
   mostrarObservacao = false,
+  mostrarPreco = false,
   submitLabel,
 }: {
   acao: (prev: EstoqueState, formData: FormData) => Promise<EstoqueState>
@@ -24,6 +25,7 @@ export function MovimentoForm({
   locais?: Opt[]
   hoje: string
   mostrarObservacao?: boolean
+  mostrarPreco?: boolean
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState<EstoqueState, FormData>(acao, {})
@@ -62,6 +64,12 @@ export function MovimentoForm({
         <Field label="Quantidade" htmlFor="quantidade">
           <input id="quantidade" name="quantidade" inputMode="decimal" required placeholder="0" className={inputClass} />
         </Field>
+
+        {mostrarPreco && (
+          <Field label="Preço unitário (R$)" htmlFor="preco_unitario" hint="Custo por unidade de medida">
+            <input id="preco_unitario" name="preco_unitario" inputMode="decimal" placeholder="0,00" className={inputClass} />
+          </Field>
+        )}
 
         <Field label="Data" htmlFor="data">
           <input id="data" name="data" type="date" required defaultValue={hoje} className={inputClass} />

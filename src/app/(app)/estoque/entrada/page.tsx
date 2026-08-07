@@ -41,6 +41,7 @@ export default async function EntradaPage() {
         unidadeFixaNome={usuario.unidade?.nome ?? '—'}
         hoje={hoje}
         mostrarObservacao
+        mostrarPreco
         submitLabel="Registrar entrada"
       />
     </div>

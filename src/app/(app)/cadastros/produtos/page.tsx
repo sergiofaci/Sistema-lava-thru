@@ -7,7 +7,6 @@ import { crudInserir, crudAtualizar, crudToggle, crudExcluir } from '@/lib/crud-
 const ROTA = '/cadastros/produtos'
 const TABELA = 'produtos'
 const ROTULO = 'Produto'
-const MEDIDAS = ['litro', 'unidade', 'kg', 'ml', 'g', 'galão', 'caixa']
 
 function num(v: FormDataEntryValue | null) {
   return Number(String(v ?? '0').replace(',', '.')) || 0
@@ -61,11 +60,11 @@ export default async function Page() {
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Shampoo automotivo' },
         {
           name: 'unidade_medida',
-          label: 'Unidade',
-          type: 'select',
+          label: 'Unidade de medida',
+          type: 'text',
           required: true,
-          defaultValue: 'litro',
-          options: MEDIDAS.map((m) => ({ value: m, label: m })),
+          placeholder: 'Ex.: galão 20L, 500ml, 1,5L, unidade',
+          hint: 'Como o produto é contado (embalagem)',
         },
         { name: 'estoque_minimo', label: 'Estoque mín.', type: 'number', defaultValue: 0 },
       ]}

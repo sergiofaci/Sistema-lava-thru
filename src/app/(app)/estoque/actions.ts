@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { requirePapel } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { parseQtd, formatQtd } from '@/lib/money'
+import { parseQtd, formatQtd, parseBRL } from '@/lib/money'
 
 export type EstoqueState = { erro?: string }
 
@@ -26,6 +26,7 @@ export async function registrarEntrada(
   const unidade_id = resolverUnidade(usuario.papel, usuario.unidade_id, formData)
   const produto_id = String(formData.get('produto_id') ?? '').trim()
   const quantidade = parseQtd(String(formData.get('quantidade') ?? ''))
+  const preco_unitario = parseBRL(String(formData.get('preco_unitario') ?? ''))
   const data = String(formData.get('data') ?? '').trim()
   const observacao = String(formData.get('observacao') ?? '').trim() || null
 
@@ -39,6 +40,7 @@ export async function registrarEntrada(
     produto_id,
     unidade_id,
     quantidade,
+    preco_unitario,
     data,
     observacao,
     usuario_id: usuario.id,
