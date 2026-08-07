@@ -1,43 +1,58 @@
 import { revalidatePath } from 'next/cache'
 import { requirePapel } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { CadastroSimples } from '@/components/CadastroSimples'
+import { CrudManager } from '@/components/CrudManager'
+import { crudInserir, crudAtualizar, crudToggle, crudExcluir } from '@/lib/crud-helpers'
 
 const ROTA = '/cadastros/centros-custo'
 const TABELA = 'centros_custo'
+const ROTULO = 'Centro de custo'
 
 export default async function Page() {
   await requirePapel('admin')
-  const supabase = await createClient()
-  const { data } = await supabase.from(TABELA).select('id, nome, ativo').order('nome')
+  const s = await createClient()
+  const { data } = await s.from(TABELA).select('id, nome, ativo').order('nome')
 
-  async function criar(formData: FormData) {
+  async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
-    await requirePapel('admin')
-    const nome = String(formData.get('nome') ?? '').trim()
-    if (!nome) return
-    const s = await createClient()
-    await s.from(TABELA).insert({ nome })
-    revalidatePath(ROTA)
+    const nome = String(fd.get('nome') ?? '').trim()
+    if (!nome) return { erro: 'Informe o nome.' }
+    const r = await crudInserir(TABELA, { nome }, ROTULO)
+    if (r.ok) revalidatePath(ROTA)
+    return r
   }
-
-  async function alternarAtivo(formData: FormData) {
+  async function atualizar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
-    await requirePapel('admin')
-    const id = String(formData.get('id'))
-    const ativo = formData.get('ativo') === '1'
-    const s = await createClient()
-    await s.from(TABELA).update({ ativo }).eq('id', id)
-    revalidatePath(ROTA)
+    const id = String(fd.get('id'))
+    const nome = String(fd.get('nome') ?? '').trim()
+    if (!nome) return { erro: 'Informe o nome.' }
+    const r = await crudAtualizar(TABELA, id, { nome }, ROTULO)
+    if (r.ok) revalidatePath(ROTA)
+    return r
+  }
+  async function alternarAtivo(fd: FormData) {
+    'use server'
+    const r = await crudToggle(TABELA, String(fd.get('id')), fd.get('ativo') === '1')
+    if (!r.erro) revalidatePath(ROTA)
+    return r
+  }
+  async function excluir(fd: FormData) {
+    'use server'
+    const r = await crudExcluir(TABELA, String(fd.get('id')))
+    if (!r.erro) revalidatePath(ROTA)
+    return r
   }
 
   return (
-    <CadastroSimples
+    <CrudManager
       titulo="Centros de Custo"
       descricao="Ex.: Operacional, Administrativo, Marketing."
+      fields={[{ name: 'nome', label: 'Nome', required: true, placeholder: 'Nome' }]}
       itens={data ?? []}
       criar={criar}
+      atualizar={atualizar}
       alternarAtivo={alternarAtivo}
+      excluir={excluir}
     />
   )
 }

@@ -1,123 +1,79 @@
 import { revalidatePath } from 'next/cache'
 import { requirePapel } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import {
-  PageHeader,
-  Card,
-  Field,
-  inputClass,
-  btnPrimary,
-  EmptyState,
-  Badge,
-} from '@/components/ui'
+import { CrudManager } from '@/components/CrudManager'
+import { crudInserir, crudAtualizar, crudToggle, crudExcluir } from '@/lib/crud-helpers'
 
 const ROTA = '/cadastros/produtos'
-const UNIDADES_MEDIDA = ['litro', 'unidade', 'kg', 'ml', 'g', 'galão', 'caixa']
+const TABELA = 'produtos'
+const ROTULO = 'Produto'
+const MEDIDAS = ['litro', 'unidade', 'kg', 'ml', 'g', 'galão', 'caixa']
+
+function num(v: FormDataEntryValue | null) {
+  return Number(String(v ?? '0').replace(',', '.')) || 0
+}
 
 export default async function Page() {
   await requirePapel('admin')
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('produtos')
+  const s = await createClient()
+  const { data } = await s
+    .from(TABELA)
     .select('id, nome, unidade_medida, estoque_minimo, ativo')
     .order('nome')
 
-  async function criar(formData: FormData) {
+  async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
-    await requirePapel('admin')
-    const nome = String(formData.get('nome') ?? '').trim()
-    const unidade_medida = String(formData.get('unidade_medida') ?? '').trim()
-    const estoque_minimo = Number(String(formData.get('estoque_minimo') ?? '0').replace(',', '.')) || 0
-    if (!nome || !unidade_medida) return
-    const s = await createClient()
-    await s.from('produtos').insert({ nome, unidade_medida, estoque_minimo })
-    revalidatePath(ROTA)
+    const nome = String(fd.get('nome') ?? '').trim()
+    const unidade_medida = String(fd.get('unidade_medida') ?? '').trim()
+    if (!nome || !unidade_medida) return { erro: 'Informe nome e unidade de medida.' }
+    const r = await crudInserir(TABELA, { nome, unidade_medida, estoque_minimo: num(fd.get('estoque_minimo')) }, ROTULO)
+    if (r.ok) revalidatePath(ROTA)
+    return r
   }
-
-  async function alternarAtivo(formData: FormData) {
+  async function atualizar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
-    await requirePapel('admin')
-    const id = String(formData.get('id'))
-    const ativo = formData.get('ativo') === '1'
-    const s = await createClient()
-    await s.from('produtos').update({ ativo }).eq('id', id)
-    revalidatePath(ROTA)
+    const id = String(fd.get('id'))
+    const nome = String(fd.get('nome') ?? '').trim()
+    const unidade_medida = String(fd.get('unidade_medida') ?? '').trim()
+    if (!nome || !unidade_medida) return { erro: 'Informe nome e unidade de medida.' }
+    const r = await crudAtualizar(TABELA, id, { nome, unidade_medida, estoque_minimo: num(fd.get('estoque_minimo')) }, ROTULO)
+    if (r.ok) revalidatePath(ROTA)
+    return r
+  }
+  async function alternarAtivo(fd: FormData) {
+    'use server'
+    const r = await crudToggle(TABELA, String(fd.get('id')), fd.get('ativo') === '1')
+    if (!r.erro) revalidatePath(ROTA)
+    return r
+  }
+  async function excluir(fd: FormData) {
+    'use server'
+    const r = await crudExcluir(TABELA, String(fd.get('id')))
+    if (!r.erro) revalidatePath(ROTA)
+    return r
   }
 
   return (
-    <div className="max-w-3xl">
-      <PageHeader
-        titulo="Produtos"
-        descricao="Insumos controlados no estoque. O estoque mínimo gera alerta de reposição."
-      />
-
-      <Card className="mb-6">
-        <form action={criar} className="flex flex-wrap items-end gap-3">
-          <div className="min-w-48 flex-1">
-            <Field label="Nome" htmlFor="nome">
-              <input id="nome" name="nome" required placeholder="Ex.: Shampoo automotivo" className={inputClass} />
-            </Field>
-          </div>
-          <div className="w-36">
-            <Field label="Unidade" htmlFor="unidade_medida">
-              <select id="unidade_medida" name="unidade_medida" className={inputClass} defaultValue="litro">
-                {UNIDADES_MEDIDA.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <div className="w-32">
-            <Field label="Estoque mín." htmlFor="estoque_minimo">
-              <input id="estoque_minimo" name="estoque_minimo" inputMode="decimal" placeholder="0" className={inputClass} />
-            </Field>
-          </div>
-          <button type="submit" className={btnPrimary}>
-            Adicionar
-          </button>
-        </form>
-      </Card>
-
-      {!data || data.length === 0 ? (
-        <EmptyState>Nenhum produto cadastrado.</EmptyState>
-      ) : (
-        <Card className="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
-                <th className="px-5 py-3 font-medium">Produto</th>
-                <th className="px-5 py-3 font-medium">Unidade</th>
-                <th className="px-5 py-3 font-medium">Estoque mín.</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((p) => (
-                <tr key={p.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-5 py-3 font-medium text-slate-700">{p.nome}</td>
-                  <td className="px-5 py-3 text-slate-500">{p.unidade_medida}</td>
-                  <td className="px-5 py-3 text-slate-500">{p.estoque_minimo}</td>
-                  <td className="px-5 py-3">
-                    {p.ativo ? <Badge tone="success">Ativo</Badge> : <Badge>Inativo</Badge>}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <form action={alternarAtivo}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <input type="hidden" name="ativo" value={p.ativo ? '0' : '1'} />
-                      <button type="submit" className="text-sm text-brand hover:underline">
-                        {p.ativo ? 'Desativar' : 'Ativar'}
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
-    </div>
+    <CrudManager
+      titulo="Produtos"
+      descricao="Insumos controlados no estoque. O estoque mínimo gera alerta de reposição."
+      fields={[
+        { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Shampoo automotivo' },
+        {
+          name: 'unidade_medida',
+          label: 'Unidade',
+          type: 'select',
+          required: true,
+          defaultValue: 'litro',
+          options: MEDIDAS.map((m) => ({ value: m, label: m })),
+        },
+        { name: 'estoque_minimo', label: 'Estoque mín.', type: 'number', defaultValue: 0 },
+      ]}
+      itens={data ?? []}
+      criar={criar}
+      atualizar={atualizar}
+      alternarAtivo={alternarAtivo}
+      excluir={excluir}
+    />
   )
 }
