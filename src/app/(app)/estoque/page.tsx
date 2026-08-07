@@ -111,7 +111,10 @@ export default async function EstoquePage() {
         titulo="Estoque e Consumo"
         descricao="Saldo por unidade e movimentações."
         acao={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link href="/estoque/consumo" className={btnGhost}>
+              📊 Consumo por produto
+            </Link>
             <Link href="/estoque/entrada" className={btnGhost}>
               + Entrada
             </Link>
