@@ -3,7 +3,8 @@ import { requireUsuario } from '@/lib/auth'
 import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { Card, inputClass, btnPrimary, Badge } from '@/components/ui'
-import { BarsCard } from '@/components/charts'
+import { BarsCard, TrendChart } from '@/components/charts'
+import Link from 'next/link'
 import { formatBRL, formatQtd, round2 } from '@/lib/money'
 
 type SP = { unidade?: string; mes?: string }
@@ -66,6 +67,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const prevInicio = `${pmes}-01`
   const prevFim = `${pmes}-${String(new Date(py, pm, 0).getDate()).padStart(2, '0')}`
 
+  // Janela de 6 meses (incluindo o mês atual) para o gráfico de evolução.
+  const trendStart = new Date(Y, M - 6, 1)
+  const trendInicio = `${trendStart.getFullYear()}-${String(trendStart.getMonth() + 1).padStart(2, '0')}-01`
+  const mesesTrend = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(Y, M - 6 + i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+    return { key, label }
+  })
+
   const unidadeFiltro = usuario.papel === 'admin' ? (sp.unidade || '') : ''
   const aplicarUnidade = <T,>(q: T): T => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,6 +93,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: fechAntData },
     { data: contasData },
     { data: saidasData },
+    { data: fechTrendData },
+    { data: contasTrendData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem').order('ordem'),
@@ -104,10 +117,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     aplicarUnidade(
       supabase
         .from('estoque_saidas')
-        .select('quantidade, produto:produtos(nome, unidade_medida)')
+        .select('quantidade, valor_total, produto:produtos(nome, unidade_medida)')
         .gte('data', mesInicio)
         .lte('data', mesFim),
     ),
+    aplicarUnidade(
+      supabase
+        .from('fechamentos_caixa')
+        .select('data, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
+        .gte('data', trendInicio)
+        .lte('data', mesFim),
+    ),
+    aplicarUnidade(supabase.from('contas_pagas').select('data, valor').gte('data', trendInicio).lte('data', mesFim)),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
@@ -161,21 +182,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .map(([label, value]) => ({ label, value: round2(value) }))
     .sort((a, b) => b.value - a.value)
 
-  // Consumo de produtos (mês)
-  const saidas = (saidasData ?? []) as { quantidade: number; produto: unknown }[]
-  const mapProd = new Map<string, { qtd: number; medida: string }>()
+  // Consumo de produtos (mês) — quantidade e valor
+  const saidas = (saidasData ?? []) as { quantidade: number; valor_total: number | null; produto: unknown }[]
+  const mapProd = new Map<string, { qtd: number; valor: number; medida: string }>()
   for (const s of saidas) {
     const nome = rel(s.produto)
     const medida = rel(s.produto, 'unidade_medida')
-    const cur = mapProd.get(nome) ?? { qtd: 0, medida }
-    cur.qtd += s.quantidade
+    const cur = mapProd.get(nome) ?? { qtd: 0, valor: 0, medida }
+    cur.qtd += Number(s.quantidade)
+    cur.valor += Number(s.valor_total ?? 0)
     mapProd.set(nome, cur)
   }
   const consumo = [...mapProd.entries()]
-    .map(([nome, v]) => ({ nome, qtd: round2(v.qtd), medida: v.medida }))
-    .sort((a, b) => b.qtd - a.qtd)
+    .map(([nome, v]) => ({ nome, qtd: round2(v.qtd), valor: round2(v.valor), medida: v.medida }))
+    .sort((a, b) => b.valor - a.valor)
+  const consumoTotal = round2(consumo.reduce((s, c) => s + c.valor, 0))
+
+  // Evolução mensal (6 meses): faturamento, despesas e resultado por mês
+  const fechTrend = (fechTrendData ?? []) as (FechRow & { data: string })[]
+  const contasTrend = (contasTrendData ?? []) as { data: string; valor: number }[]
+  const trend = mesesTrend.map((m) => {
+    const fat = round2(
+      fechTrend.filter((f) => f.data.startsWith(m.key)).reduce((s, f) => s + faturamento(f), 0),
+    )
+    const desp = round2(
+      contasTrend.filter((c) => c.data.startsWith(m.key)).reduce((s, c) => s + c.valor, 0),
+    )
+    return { mes: m.label, faturamento: fat, despesas: desp, resultado: round2(fat - desp) }
+  })
 
   const resultado = round2(fatMes - despesasMes)
+  const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
+  const ticketMedio = totalLavMes > 0 ? round2(fatMes / totalLavMes) : 0
   const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
     new Date(Y, M - 1, 1),
   )
@@ -213,25 +251,33 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           titulo="Faturamento do mês"
           valor={formatBRL(fatMes)}
           sub={
-            variacao === null ? (
-              'sem base do mês anterior'
-            ) : (
-              <span className={variacao >= 0 ? 'text-success' : 'text-danger'}>
-                {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}% vs. mês anterior
-              </span>
-            )
+            <>
+              {variacao === null ? (
+                <span>sem base do mês anterior</span>
+              ) : (
+                <span className={variacao >= 0 ? 'text-success' : 'text-danger'}>
+                  {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}% vs. mês anterior
+                </span>
+              )}
+              <span className="block">Ticket médio: {formatBRL(ticketMedio)}</span>
+            </>
           }
         />
         <Stat titulo="Despesas do mês" valor={formatBRL(despesasMes)} sub={`${contas.length} lançamento(s)`} destaque="danger" />
         <Stat
           titulo="Resultado do mês"
           valor={formatBRL(resultado)}
-          sub="faturamento − despesas"
+          sub={margem === null ? 'faturamento − despesas' : `Margem: ${margem.toFixed(1)}%`}
           destaque={resultado >= 0 ? 'success' : 'danger'}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Evolução mensal */}
+        <Painel titulo="Evolução — faturamento, despesas e resultado" sub="Últimos 6 meses" full>
+          <TrendChart data={trend} />
+        </Painel>
+
         {/* Faturamento por forma */}
         <Painel titulo="Faturamento por forma de pagamento" sub="No mês">
           <BarsCard data={porForma} tipo="brl" cor="#0d1d60" />
@@ -281,17 +327,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Painel>
 
         {/* Consumo de produtos */}
-        <Painel titulo="Consumo de produtos" sub="No mês" full>
+        <Painel
+          titulo="Consumo de produtos"
+          sub={consumoTotal > 0 ? `Total no mês: ${formatBRL(consumoTotal)}` : 'No mês'}
+          full
+          acao={
+            <Link href="/estoque/consumo" className="text-sm text-brand hover:underline">
+              Ver relatório →
+            </Link>
+          }
+        >
           {consumo.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">Sem consumo registrado no período.</p>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {consumo.map((c) => (
                 <div key={c.nome} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                  <span className="text-sm text-slate-600">{c.nome}</span>
-                  <span className="font-semibold text-brand-dark">
-                    {formatQtd(c.qtd)} {c.medida}
-                  </span>
+                  <div>
+                    <span className="block text-sm text-slate-600">{c.nome}</span>
+                    <span className="text-xs text-slate-400">
+                      {formatQtd(c.qtd)} {c.medida}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-brand-dark">{formatBRL(c.valor)}</span>
                 </div>
               ))}
             </div>
@@ -328,17 +386,22 @@ function Painel({
   sub,
   children,
   full,
+  acao,
 }: {
   titulo: string
   sub?: string
   children: React.ReactNode
   full?: boolean
+  acao?: React.ReactNode
 }) {
   return (
     <Card className={full ? 'lg:col-span-2' : ''}>
-      <div className="mb-4">
-        <h2 className="font-semibold text-brand-dark">{titulo}</h2>
-        {sub && <p className="text-xs text-slate-500">{sub}</p>}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-brand-dark">{titulo}</h2>
+          {sub && <p className="text-xs text-slate-500">{sub}</p>}
+        </div>
+        {acao}
       </div>
       {children}
     </Card>
