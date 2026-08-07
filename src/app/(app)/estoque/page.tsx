@@ -3,6 +3,7 @@ import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary, btnGhost } from '@/components/ui'
 import { formatQtd, formatBRL, round2 } from '@/lib/money'
+import { EstornarMovimento } from './EstornarMovimento'
 
 function rel(r: unknown, campo = 'nome'): string {
   if (!r) return '—'
@@ -21,7 +22,8 @@ function dataBR(iso: string): string {
 }
 
 export default async function EstoquePage() {
-  await requireModulo('estoque')
+  const usuario = await requireModulo('estoque')
+  const isAdmin = usuario.papel === 'admin'
   const supabase = await createClient()
 
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
@@ -73,6 +75,8 @@ export default async function EstoquePage() {
   const movimentos = [
     ...(entradasRes.data ?? []).map((e) => ({
       id: 'e' + e.id,
+      rawId: e.id as string,
+      tipoKey: 'entrada' as const,
       tipo: 'Entrada' as const,
       quantidade: Number(e.quantidade),
       valor: round2(Number(e.quantidade) * Number(e.preco_unitario ?? 0)),
@@ -85,6 +89,8 @@ export default async function EstoquePage() {
     })),
     ...(saidasRes.data ?? []).map((s) => ({
       id: 's' + s.id,
+      rawId: s.id as string,
+      tipoKey: 'saida' as const,
       tipo: 'Baixa' as const,
       quantidade: Number(s.quantidade),
       valor: Number(s.valor_total ?? 0),
@@ -218,6 +224,7 @@ export default async function EstoquePage() {
                   <th className="px-5 py-3 font-medium">Local</th>
                   <th className="px-5 py-3 text-right font-medium">Qtd.</th>
                   <th className="px-5 py-3 text-right font-medium">Valor</th>
+                  {isAdmin && <th className="no-print px-5 py-3 text-right font-medium">Ações</th>}
                 </tr>
               </thead>
               <tbody>
@@ -241,6 +248,11 @@ export default async function EstoquePage() {
                     <td className="px-5 py-3 text-right text-slate-600">
                       {m.valor > 0 ? formatBRL(m.valor) : '—'}
                     </td>
+                    {isAdmin && (
+                      <td className="no-print px-5 py-3 text-right">
+                        <EstornarMovimento id={m.rawId} tipo={m.tipoKey} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

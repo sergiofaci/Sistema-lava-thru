@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, Badge } from '@/components/ui'
 import { formatBRL } from '@/lib/money'
 import { TURNO_LABEL, type Turno } from '@/lib/types'
+import { EstornarFechamento } from './EstornarFechamento'
 
 const dtFmt = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -76,9 +77,12 @@ export default async function DetalheFechamento({
         titulo="Fechamento de Caixa"
         descricao={`${rel(f.unidade)} · Turno ${TURNO_LABEL[f.turno as Turno] ?? f.turno} · ${dtFmt.format(new Date(f.data_hora))}`}
         acao={
-          <Link href="/fechamentos" className="text-sm text-brand hover:underline">
-            ← Voltar
-          </Link>
+          <div className="flex items-center gap-4">
+            {usuario.papel === 'admin' && <EstornarFechamento id={f.id} />}
+            <Link href="/fechamentos" className="text-sm text-brand hover:underline">
+              ← Voltar
+            </Link>
+          </div>
         }
       />
 

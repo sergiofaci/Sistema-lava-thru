@@ -6,6 +6,7 @@ import { formatBRL, round2 } from '@/lib/money'
 import { ORIGENS_PAGAMENTO } from '@/lib/types'
 import { toCSV } from '@/lib/csv'
 import { ExportBar } from '@/components/ExportBar'
+import { AcoesConta } from './AcoesConta'
 
 const brl = (n: number) => n.toFixed(2).replace('.', ',')
 
@@ -24,6 +25,9 @@ type Row = {
   numero_nota: string | null
   valor: number
   origem_pagamento: string
+  unidade_id: string
+  centro_custo_id: string
+  tipo_despesa_id: string
   unidade: { nome: string } | { nome: string }[] | null
   centro: { nome: string } | { nome: string }[] | null
   tipo: { nome: string } | { nome: string }[] | null
@@ -57,7 +61,7 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
   let q = supabase
     .from('contas_pagas')
     .select(
-      'id, data, numero_nota, valor, origem_pagamento, unidade:unidades(nome), centro:centros_custo(nome), tipo:tipos_despesa(nome)',
+      'id, data, numero_nota, valor, origem_pagamento, unidade_id, centro_custo_id, tipo_despesa_id, unidade:unidades(nome), centro:centros_custo(nome), tipo:tipos_despesa(nome)',
     )
     .order('data', { ascending: false })
     .limit(300)
@@ -176,6 +180,7 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                   <th className="px-5 py-3 font-medium">Nota</th>
                   <th className="px-5 py-3 font-medium">Origem</th>
                   <th className="px-5 py-3 text-right font-medium">Valor</th>
+                  <th className="no-print px-5 py-3 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -189,6 +194,23 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                     <td className="px-5 py-3 text-slate-600">{c.origem_pagamento}</td>
                     <td className="px-5 py-3 text-right font-medium text-slate-700">
                       {formatBRL(c.valor)}
+                    </td>
+                    <td className="no-print px-5 py-3">
+                      <AcoesConta
+                        conta={{
+                          id: c.id,
+                          unidade_id: c.unidade_id,
+                          centro_custo_id: c.centro_custo_id,
+                          tipo_despesa_id: c.tipo_despesa_id,
+                          data: c.data,
+                          numero_nota: c.numero_nota,
+                          valor: c.valor,
+                        }}
+                        centros={centros ?? []}
+                        tipos={tipos ?? []}
+                        unidades={unidades ?? null}
+                        origem={c.origem_pagamento}
+                      />
                     </td>
                   </tr>
                 ))}

@@ -2,7 +2,8 @@
 
 import { z } from 'zod'
 import { redirect } from 'next/navigation'
-import { requireModulo } from '@/lib/auth'
+import { revalidatePath } from 'next/cache'
+import { requireModulo, requirePapel } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { round2 } from '@/lib/money'
 
@@ -160,4 +161,15 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
   }
 
   redirect(`/fechamentos/${fech.id}`)
+}
+
+// Estorna (exclui) um fechamento — libera o turno para relançar. Só admin.
+export async function estornarFechamento(formData: FormData): Promise<{ erro?: string }> {
+  await requirePapel('admin')
+  const id = String(formData.get('id'))
+  const supabase = await createClient()
+  const { error } = await supabase.from('fechamentos_caixa').delete().eq('id', id)
+  if (error) return { erro: 'Falha ao estornar: ' + error.message }
+  revalidatePath('/fechamentos')
+  redirect('/fechamentos')
 }
