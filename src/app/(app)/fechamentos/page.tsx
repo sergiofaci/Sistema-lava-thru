@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { requireUsuario } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
+import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
@@ -10,7 +11,7 @@ type Row = {
   data: string
   data_hora: string
   turno: Turno
-  maquina_cartao: string
+  maquina_cartao: string | null
   sistema_dinheiro: number
   sistema_pix: number
   sistema_credito: number
@@ -45,10 +46,13 @@ function dataBR(iso: string): string {
 }
 
 export default async function FechamentosPage() {
-  await requireUsuario()
+  const usuario = await requireModulo('fechamentos')
+  const mods = await modulosDoUsuario(usuario)
+  const verHistorico = mods.has('fechamentos_historico')
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
   const supabase = await createClient()
 
-  const { data } = await supabase
+  let q = supabase
     .from('fechamentos_caixa')
     .select(
       'id, data, data_hora, turno, maquina_cartao, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, diferenca_total, fechado_com_diferenca, unidade:unidades(nome), usuario:usuarios(nome)',
@@ -57,13 +61,17 @@ export default async function FechamentosPage() {
     .order('data_hora', { ascending: false })
     .limit(60)
 
+  // Sem acesso ao histórico: vê só o próprio fechamento do dia.
+  if (!verHistorico) q = q.eq('usuario_id', usuario.id).eq('data', hoje)
+
+  const { data } = await q
   const fechamentos = (data ?? []) as Row[]
 
   return (
     <div>
       <PageHeader
         titulo="Fechamento de Caixa"
-        descricao="Histórico de fechamentos da(s) unidade(s)."
+        descricao={verHistorico ? 'Histórico de fechamentos.' : 'Seu fechamento de hoje.'}
         acao={
           <Link href="/fechamentos/novo" className={btnPrimary}>
             + Novo fechamento
@@ -104,7 +112,7 @@ export default async function FechamentosPage() {
                     </td>
                     <td className="px-5 py-3 text-slate-600">{nome(f.unidade)}</td>
                     <td className="px-5 py-3 text-slate-600">{nome(f.usuario)}</td>
-                    <td className="px-5 py-3 text-slate-600">{f.maquina_cartao}</td>
+                    <td className="px-5 py-3 text-slate-600">{f.maquina_cartao ?? 'Rede/Sipag'}</td>
                     <td className="px-5 py-3 text-right font-medium text-slate-700">
                       {formatBRL(totalSistema(f))}
                     </td>

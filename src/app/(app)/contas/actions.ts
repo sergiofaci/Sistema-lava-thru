@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { parseBRL } from '@/lib/money'
 import { ORIGENS_PAGAMENTO } from '@/lib/types'
@@ -9,7 +9,7 @@ import { ORIGENS_PAGAMENTO } from '@/lib/types'
 export type ContaState = { erro?: string }
 
 export async function criarConta(_prev: ContaState, formData: FormData): Promise<ContaState> {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('contas')
 
   const unidade_id =
     usuario.papel === 'admin'

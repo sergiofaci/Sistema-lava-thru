@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { requireUsuario } from '@/lib/auth'
+import { notFound, redirect } from 'next/navigation'
+import { requireModulo } from '@/lib/auth'
+import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, Badge } from '@/components/ui'
 import { formatBRL } from '@/lib/money'
@@ -25,7 +26,7 @@ export default async function DetalheFechamento({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireUsuario()
+  const usuario = await requireModulo('fechamentos')
   const { id } = await params
   const supabase = await createClient()
 
@@ -38,6 +39,10 @@ export default async function DetalheFechamento({
     .single()
 
   if (!f) notFound()
+
+  // Sem histórico: o caixa só acessa o fechamento que ele mesmo fez.
+  const mods = await modulosDoUsuario(usuario)
+  if (!mods.has('fechamentos_historico') && f.usuario_id !== usuario.id) redirect('/fechamentos')
 
   const linhas = [
     { nome: 'Dinheiro', maq: null, sis: f.sistema_dinheiro, q: f.sistema_qtd_dinheiro, dif: null },
@@ -79,7 +84,7 @@ export default async function DetalheFechamento({
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Info label="Colaborador" valor={rel(f.usuario)} />
-        <Info label="Máquina" valor={f.maquina_cartao} />
+        <Info label="Máquina" valor={f.maquina_cartao ?? 'Rede + Sipag'} />
         <Info label="Total sistema" valor={formatBRL(totalSistema)} />
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs text-slate-500">Diferença</p>

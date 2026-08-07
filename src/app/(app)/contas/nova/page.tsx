@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader } from '@/components/ui'
 import { ContaForm } from './ContaForm'
 
 export default async function NovaContaPage() {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('contas')
   const supabase = await createClient()
 
   const [{ data: centros }, { data: tipos }] = await Promise.all([

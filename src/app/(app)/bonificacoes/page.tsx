@@ -1,4 +1,4 @@
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, inputClass, btnPrimary, EmptyState } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
@@ -66,7 +66,7 @@ function faturamento(f: Fech): number {
 }
 
 export default async function BonificacoesPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('bonificacoes')
   const sp = await searchParams
   const supabase = await createClient()
 

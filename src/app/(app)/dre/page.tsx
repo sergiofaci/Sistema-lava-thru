@@ -1,4 +1,4 @@
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, inputClass, btnPrimary, Card } from '@/components/ui'
 import { round2 } from '@/lib/money'
@@ -28,7 +28,7 @@ function somaFat(rows: FechRow[]): number {
 }
 
 export default async function DREPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('dre')
   const sp = await searchParams
   const supabase = await createClient()
 

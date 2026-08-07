@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { parseQtd, formatQtd, parseBRL } from '@/lib/money'
 
@@ -21,7 +21,7 @@ export async function registrarEntrada(
   _prev: EstoqueState,
   formData: FormData,
 ): Promise<EstoqueState> {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('estoque')
 
   const unidade_id = resolverUnidade(usuario.papel, usuario.unidade_id, formData)
   const produto_id = String(formData.get('produto_id') ?? '').trim()
@@ -54,7 +54,7 @@ export async function registrarBaixa(
   _prev: EstoqueState,
   formData: FormData,
 ): Promise<EstoqueState> {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('estoque')
 
   const unidade_id = resolverUnidade(usuario.papel, usuario.unidade_id, formData)
   const produto_id = String(formData.get('produto_id') ?? '').trim()

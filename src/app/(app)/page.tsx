@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireUsuario } from '@/lib/auth'
+import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { Card, inputClass, btnPrimary, Badge } from '@/components/ui'
 import { BarsCard } from '@/components/charts'
@@ -48,7 +49,8 @@ function somaFat(rows: FechRow[]): number {
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<SP> }) {
   const usuario = await requireUsuario()
-  if (usuario.papel === 'caixa') redirect('/fechamentos')
+  const mods = await modulosDoUsuario(usuario)
+  if (!mods.has('dashboard')) redirect(mods.has('fechamentos') ? '/fechamentos' : '/sem-permissao')
   const sp = await searchParams
   const supabase = await createClient()
 

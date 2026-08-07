@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, btnPrimary, btnGhost, inputClass } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
@@ -37,7 +37,7 @@ function dataBR(iso: string): string {
 }
 
 export default async function ContasPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('contas')
   const sp = await searchParams
   const supabase = await createClient()
 

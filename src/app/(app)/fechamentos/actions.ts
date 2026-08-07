@@ -2,7 +2,7 @@
 
 import { z } from 'zod'
 import { redirect } from 'next/navigation'
-import { requireUsuario } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { round2 } from '@/lib/money'
 
@@ -13,8 +13,11 @@ const schema = z.object({
   unidade_id: z.string().uuid().optional(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // retroativo (só admin)
   turno: z.enum(['manha', 'tarde']),
-  maquina_cartao: z.enum(['Rede Card', 'Sipag']),
-  maquina: z.object({ pix: Valor, credito: Valor, debito: Valor }),
+  // As duas maquininhas podem ser usadas no mesmo turno.
+  maquina: z.object({
+    rede: z.object({ pix: Valor, credito: Valor, debito: Valor }),
+    sipag: z.object({ pix: Valor, credito: Valor, debito: Valor }),
+  }),
   sistema: z.object({
     dinheiro: Valor,
     pix: Valor,
@@ -43,7 +46,7 @@ export type FechamentoResult =
   | { ok: false; precisaConfirmar: true; diferenca: number }
 
 export async function criarFechamento(input: FechamentoInput): Promise<FechamentoResult> {
-  const usuario = await requireUsuario()
+  const usuario = await requireModulo('fechamentos')
 
   const parsed = schema.safeParse(input)
   if (!parsed.success) return { ok: false, erro: 'Dados inválidos. Revise os campos.' }
@@ -76,10 +79,15 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
     }
   }
 
+  // Total da máquina = Rede Card + Sipag (podem ser usadas no mesmo turno).
+  const maqPix = round2(data.maquina.rede.pix + data.maquina.sipag.pix)
+  const maqCredito = round2(data.maquina.rede.credito + data.maquina.sipag.credito)
+  const maqDebito = round2(data.maquina.rede.debito + data.maquina.sipag.debito)
+
   // Diferenças recalculadas no servidor (máquina - sistema).
-  const diferenca_pix = round2(data.maquina.pix - data.sistema.pix)
-  const diferenca_credito = round2(data.maquina.credito - data.sistema.credito)
-  const diferenca_debito = round2(data.maquina.debito - data.sistema.debito)
+  const diferenca_pix = round2(maqPix - data.sistema.pix)
+  const diferenca_credito = round2(maqCredito - data.sistema.credito)
+  const diferenca_debito = round2(maqDebito - data.sistema.debito)
   const diferenca_total = round2(
     Math.abs(diferenca_pix) + Math.abs(diferenca_credito) + Math.abs(diferenca_debito),
   )
@@ -97,10 +105,16 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
       usuario_id: usuario.id,
       data: dataFech,
       turno: data.turno,
-      maquina_cartao: data.maquina_cartao,
-      maquina_pix: data.maquina.pix,
-      maquina_credito: data.maquina.credito,
-      maquina_debito: data.maquina.debito,
+      maquina_cartao: null,
+      maquina_pix: maqPix,
+      maquina_credito: maqCredito,
+      maquina_debito: maqDebito,
+      maquina_rede_pix: data.maquina.rede.pix,
+      maquina_rede_credito: data.maquina.rede.credito,
+      maquina_rede_debito: data.maquina.rede.debito,
+      maquina_sipag_pix: data.maquina.sipag.pix,
+      maquina_sipag_credito: data.maquina.sipag.credito,
+      maquina_sipag_debito: data.maquina.sipag.debito,
       sistema_dinheiro: data.sistema.dinheiro,
       sistema_pix: data.sistema.pix,
       sistema_credito: data.sistema.credito,

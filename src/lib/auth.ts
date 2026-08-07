@@ -36,3 +36,12 @@ export async function requirePapel(...papeis: Papel[]): Promise<UsuarioComUnidad
   if (!papeis.includes(usuario.papel)) redirect('/sem-permissao')
   return usuario
 }
+
+// Exige que o cargo do usuário tenha acesso ao módulo (configurável pelo admin).
+export async function requireModulo(modulo: import('@/lib/modulos').ModuloKey): Promise<UsuarioComUnidade> {
+  const usuario = await requireUsuario()
+  const { modulosDoUsuario } = await import('@/lib/permissoes')
+  const mods = await modulosDoUsuario(usuario)
+  if (!mods.has(modulo)) redirect('/sem-permissao')
+  return usuario
+}

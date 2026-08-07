@@ -1,12 +1,12 @@
 import Link from 'next/link'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader } from '@/components/ui'
 import { MovimentoForm } from '../MovimentoForm'
 import { registrarBaixa } from '../actions'
 
 export default async function BaixaPage() {
-  const usuario = await requirePapel('admin', 'gerente')
+  const usuario = await requireModulo('estoque')
   const supabase = await createClient()
 
   const [{ data: produtos }, { data: locais }] = await Promise.all([

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requirePapel } from '@/lib/auth'
+import { requireModulo } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary, btnGhost } from '@/components/ui'
 import { formatQtd, formatBRL, round2 } from '@/lib/money'
@@ -21,7 +21,7 @@ function dataBR(iso: string): string {
 }
 
 export default async function EstoquePage() {
-  await requirePapel('admin', 'gerente')
+  await requireModulo('estoque')
   const supabase = await createClient()
 
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
