@@ -8,12 +8,13 @@ const ROTA = '/cadastros/tipos-lavagem'
 const TABELA = 'tipos_lavagem'
 const ROTULO = 'Tipo de lavagem'
 
+// Escopo de módulo: server actions inline não podem capturar função local.
+const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico' : 'lavagem')
+
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
   const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, ativo').order('ordem')
-
-  const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico' : 'lavagem')
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'

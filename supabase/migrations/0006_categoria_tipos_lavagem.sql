@@ -16,8 +16,10 @@ alter table public.tipos_lavagem
   add constraint tipos_lavagem_categoria_check check (categoria in ('lavagem', 'servico'));
 
 -- Pré-marca como serviço os tipos que claramente não são lavagem.
+-- Cuidado: NÃO usar '%box%' aqui — pegaria "Exclusiva sem/com Box", que
+-- são lavagens. "Box de Limpeza Interna" já é pego por '%limpeza interna%'.
 -- (Ajuste os demais na tela Cadastros → Tipos de Lavagem, se necessário.)
 update public.tipos_lavagem
    set categoria = 'servico'
  where categoria = 'lavagem'
-   and (nome ilike '%limpeza interna%' or nome ilike '%box%');
+   and nome ilike '%limpeza interna%';
