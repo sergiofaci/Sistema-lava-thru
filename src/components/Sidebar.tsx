@@ -16,11 +16,13 @@ const ITENS: Item[] = [
   { href: '/fechamentos', label: 'Fechamento de Caixa', papeis: ['admin', 'gerente', 'caixa'] },
   { href: '/contas', label: 'Contas a Pagar', papeis: ['admin', 'gerente'] },
   { href: '/estoque', label: 'Estoque e Consumo', papeis: ['admin', 'gerente'] },
+  { href: '/bonificacoes', label: 'Bonificações', papeis: ['admin', 'gerente'] },
 ]
 
 const CADASTROS: Item[] = [
   { href: '/cadastros/unidades', label: 'Unidades', papeis: ['admin'] },
   { href: '/cadastros/usuarios', label: 'Usuários', papeis: ['admin'] },
+  { href: '/cadastros/colaboradores', label: 'Colaboradores', papeis: ['admin'] },
   { href: '/cadastros/tipos-lavagem', label: 'Tipos de Lavagem', papeis: ['admin'] },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo', papeis: ['admin'] },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa', papeis: ['admin'] },

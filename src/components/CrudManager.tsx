@@ -15,12 +15,19 @@ import {
 export type CrudField = {
   name: string
   label: string
-  type?: 'text' | 'number' | 'select'
+  type?: 'text' | 'number' | 'select' | 'date'
   options?: { value: string; label: string }[]
   required?: boolean
   placeholder?: string
   hint?: string
   defaultValue?: string | number
+}
+
+function fmtData(v: unknown): string {
+  const s = String(v ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s || '—'
+  const [y, m, d] = s.slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
 }
 
 export type CrudRow = { id: string; ativo: boolean } & Record<string, unknown>
@@ -58,7 +65,7 @@ function Inputs({
               <input
                 id={id}
                 name={f.name}
-                type={f.type === 'number' ? 'number' : 'text'}
+                type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                 step={f.type === 'number' ? 'any' : undefined}
                 required={f.required}
                 placeholder={f.placeholder}
@@ -185,7 +192,9 @@ export function CrudManager({
                           {f.type === 'select'
                             ? f.options?.find((o) => String(o.value) === String(row[f.name]))?.label ??
                               String(row[f.name] ?? '—')
-                            : String(row[f.name] ?? '—')}
+                            : f.type === 'date'
+                              ? fmtData(row[f.name])
+                              : String(row[f.name] ?? '—')}
                         </td>
                       ))}
                       <td className="px-5 py-3">

@@ -40,6 +40,15 @@ export const TURNO_LABEL: Record<Turno, string> = {
   tarde: 'Tarde',
 }
 
+// Cargos dos colaboradores (base das bonificações)
+export type Cargo = 'caixa' | 'aux_limpeza' | 'aux_maquina' | 'gerente'
+export const CARGO_LABEL: Record<Cargo, string> = {
+  caixa: 'Caixa',
+  aux_limpeza: 'Aux. de Limpeza Interna',
+  aux_maquina: 'Aux. de Lavagem (Máquina)',
+  gerente: 'Gerente / Supervisor',
+}
+
 export function podeGerenciarCadastros(papel: Papel) {
   return papel === 'admin'
 }
