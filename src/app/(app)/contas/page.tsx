@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, btnPrimary, btnGhost, inputClass } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
 import { ORIGENS_PAGAMENTO } from '@/lib/types'
+import { toCSV } from '@/lib/csv'
+import { ExportBar } from '@/components/ExportBar'
+
+const brl = (n: number) => n.toFixed(2).replace('.', ',')
 
 type SP = {
   unidade?: string
@@ -69,15 +73,32 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
   const contas = (data ?? []) as Row[]
   const total = round2(contas.reduce((s, c) => s + c.valor, 0))
 
+  const csv = toCSV([
+    ['Data', 'Unidade', 'Centro de custo', 'Tipo de despesa', 'Nota', 'Origem', 'Valor'],
+    ...contas.map((c) => [
+      dataBR(c.data),
+      rel(c.unidade),
+      rel(c.centro),
+      rel(c.tipo),
+      c.numero_nota ?? '',
+      c.origem_pagamento,
+      brl(c.valor),
+    ]),
+    ['', '', '', '', '', 'TOTAL', brl(total)],
+  ])
+
   return (
     <div>
       <PageHeader
         titulo="Contas a Pagar"
         descricao="Despesas pagas por unidade."
         acao={
-          <Link href="/contas/nova" className={btnPrimary}>
-            + Novo pagamento
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportBar csv={csv} filename="contas-a-pagar" />
+            <Link href="/contas/nova" className={btnPrimary}>
+              + Novo pagamento
+            </Link>
+          </div>
         }
       />
 

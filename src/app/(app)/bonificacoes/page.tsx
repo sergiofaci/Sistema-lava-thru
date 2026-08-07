@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, inputClass, btnPrimary, EmptyState } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
 import { TURNO_LABEL } from '@/lib/types'
+import { toCSV } from '@/lib/csv'
+import { ExportBar } from '@/components/ExportBar'
 
 type SP = { unidade?: string; mes?: string }
 
@@ -223,12 +225,38 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
 
   const totalGeral = round2(totalCaixa + totalMaquina + totalLimpeza + totalGerente)
 
+  const brl = (n: number) => n.toFixed(2).replace('.', ',')
+  const csv = toCSV([
+    ['Bonificações — Lava Thru', mesLabel],
+    [],
+    ['CAIXA'],
+    ['Colaborador', 'Bônus lavagens', 'Ticket médio', 'Bônus ticket', 'Kits', 'Bônus kits', 'Total'],
+    ...caixas.map((c) => [c.nome, brl(c.bonusLavagens), brl(c.ticket), brl(c.bonusTicket), c.kits, brl(c.bonusKits), brl(c.total)]),
+    ['Subtotal Caixa', '', '', '', '', '', brl(totalCaixa)],
+    [],
+    ['AUX. MÁQUINA', `${tunelTotal} veículos`, 'Pool', brl(poolMaquina), `${auxMaquina.length} pessoa(s)`, 'Por pessoa', brl(porPessoaMaquina)],
+    [],
+    ['AUX. LIMPEZA'],
+    ...limpezaTurnos.map((t) => [TURNO_LABEL[t.turno], `${t.qtd} limpezas`, 'Pool', brl(t.pool), `${t.pessoas.length} pessoa(s)`, 'Por pessoa', brl(t.porPessoa)]),
+    [],
+    ['GERENTE'],
+    ['Nome', 'Tempo (meses)', '%', 'Bônus'],
+    ...gerentes.map((g) => [g.nome, g.meses, g.pct.toFixed(1), brl(g.bonus)]),
+    [],
+    ['TOTAL GERAL', brl(totalGeral)],
+  ])
+
   return (
     <div>
       <PageHeader
         titulo="Bonificações"
         descricao={`${mesLabel} — cálculo mensal por cargo`}
-        acao={filtro}
+        acao={
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportBar csv={csv} filename={`bonificacoes-${mes}`} />
+            {filtro}
+          </div>
+        }
       />
 
       {/* Resumo */}

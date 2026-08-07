@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, inputClass, btnPrimary, Card } from '@/components/ui'
 import { round2 } from '@/lib/money'
 import { DRETabela, type DREData } from './DRETabela'
+import { toCSV } from '@/lib/csv'
+import { ExportBar } from '@/components/ExportBar'
 
 type SP = { unidade?: string; mes?: string }
 
@@ -120,13 +122,32 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
 
   const unidades = unidadesRes.data
 
+  const brl = (n: number) => n.toFixed(2).replace('.', ',')
+  const csv = toCSV([
+    ['DRE — Lava Thru', mesLabel],
+    [],
+    ['RECEITA OPERACIONAL', brl(receitaBruta)],
+    ...receitas.map((r) => ['  ' + r.label, brl(r.value)]),
+    [],
+    ['(-) DESPESAS', brl(despesasTotal)],
+    ...grupos.flatMap((g) => [
+      [g.centro, brl(g.total)],
+      ...g.itens.map((i) => ['  ' + i.label, brl(i.value)]),
+    ]),
+    [],
+    ['RESULTADO DO PERÍODO', brl(resultado)],
+    ['Margem (%)', margem === null ? '' : margem.toFixed(1)],
+  ])
+
   return (
     <div>
       <PageHeader
         titulo="DRE — Resultado"
         descricao="Receita (fechamentos) menos despesas (contas a pagar), por período."
         acao={
-          <form method="get" className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportBar csv={csv} filename={`dre-${mes}`} />
+            <form method="get" className="flex flex-wrap items-center gap-2">
             {unidades && (
               <select name="unidade" defaultValue={unidadeFiltro} className={inputClass}>
                 <option value="">Todas as unidades</option>
@@ -141,7 +162,8 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
             <button type="submit" className={btnPrimary}>
               Aplicar
             </button>
-          </form>
+            </form>
+          </div>
         }
       />
 
