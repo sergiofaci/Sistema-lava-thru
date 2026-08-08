@@ -21,6 +21,7 @@ const CADASTROS = [
   { href: '/cadastros/colaboradores', label: 'Colaboradores' },
   { href: '/cadastros/permissoes', label: 'Permissões' },
   { href: '/cadastros/tipos-lavagem', label: 'Tipos de Lavagem' },
+  { href: '/cadastros/bonificacoes', label: 'Bonificações (regras)' },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo' },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa' },
   { href: '/cadastros/produtos', label: 'Produtos' },
