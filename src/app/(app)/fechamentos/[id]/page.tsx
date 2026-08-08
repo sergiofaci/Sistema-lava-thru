@@ -46,7 +46,7 @@ export default async function DetalheFechamento({
   if (!mods.has('fechamentos_historico') && f.usuario_id !== usuario.id) redirect('/fechamentos')
 
   const linhas = [
-    { nome: 'Dinheiro', maq: null, sis: f.sistema_dinheiro, q: f.sistema_qtd_dinheiro, dif: null },
+    { nome: 'Dinheiro', maq: f.contagem_dinheiro ?? 0, sis: f.sistema_dinheiro, q: f.sistema_qtd_dinheiro, dif: f.diferenca_dinheiro ?? null },
     { nome: 'Pix', maq: f.maquina_pix, sis: f.sistema_pix, q: f.sistema_qtd_pix, dif: f.diferenca_pix },
     { nome: 'Crédito', maq: f.maquina_credito, sis: f.sistema_credito, q: f.sistema_qtd_credito, dif: f.diferenca_credito },
     { nome: 'Débito', maq: f.maquina_debito, sis: f.sistema_debito, q: f.sistema_qtd_debito, dif: f.diferenca_debito },
@@ -94,7 +94,9 @@ export default async function DetalheFechamento({
           <p className="text-xs text-slate-500">Diferença</p>
           <div className="mt-1">
             {f.fechado_com_diferenca ? (
-              <Badge tone="danger">{formatBRL(f.diferenca_total)}</Badge>
+              <Badge tone={f.diferenca_total < 0 ? 'danger' : 'success'}>
+                {(f.diferenca_total > 0 ? '+' : '') + formatBRL(f.diferenca_total)}
+              </Badge>
             ) : (
               <Badge tone="success">Sem diferença</Badge>
             )}
@@ -111,7 +113,7 @@ export default async function DetalheFechamento({
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-2 font-medium">Forma</th>
-                <th className="px-3 py-2 text-right font-medium">Máquina</th>
+                <th className="px-3 py-2 text-right font-medium">Apurado</th>
                 <th className="px-3 py-2 text-right font-medium">Sistema</th>
                 <th className="px-3 py-2 text-right font-medium">Qtd.</th>
                 <th className="px-5 py-2 text-right font-medium">Diferença</th>
@@ -129,10 +131,12 @@ export default async function DetalheFechamento({
                   <td className="px-5 py-2 text-right font-medium">
                     {l.dif === null ? (
                       <span className="text-slate-300">—</span>
-                    ) : Math.abs(l.dif) > 0.004 ? (
-                      <span className="text-danger">{formatBRL(l.dif)}</span>
-                    ) : (
+                    ) : Math.abs(l.dif) <= 0.004 ? (
                       <span className="text-success">OK</span>
+                    ) : (
+                      <span className={l.dif < 0 ? 'text-danger' : 'text-success'}>
+                        {(l.dif > 0 ? '+' : '') + formatBRL(l.dif)}
+                      </span>
                     )}
                   </td>
                 </tr>
