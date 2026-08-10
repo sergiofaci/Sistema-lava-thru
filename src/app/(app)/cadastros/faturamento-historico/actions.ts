@@ -40,9 +40,19 @@ export async function importarHistorico(payload: {
   const s = await createClient()
   const meses = [...new Set(rows.map((r) => r.mes))]
 
-  // Reimportar um mês substitui o que já existe (idempotente).
-  const del = await s.from('faturamento_historico').delete().eq('unidade_id', unidade_id).in('mes', meses)
-  if (del.error) return { erro: 'Falha ao limpar meses: ' + del.error.message }
+  // Reimportar substitui apenas a MESMA categoria naquele mês/unidade —
+  // assim importar lavagens não apaga as assinaturas do mesmo mês, e vice-versa.
+  const categorias = [...new Set(rows.map((r) => r.categoria))]
+  for (const cat of categorias) {
+    const mesesCat = [...new Set(rows.filter((r) => r.categoria === cat).map((r) => r.mes))]
+    const del = await s
+      .from('faturamento_historico')
+      .delete()
+      .eq('unidade_id', unidade_id)
+      .eq('categoria', cat)
+      .in('mes', mesesCat)
+    if (del.error) return { erro: 'Falha ao limpar dados anteriores: ' + del.error.message }
+  }
 
   const { error } = await s.from('faturamento_historico').insert(rows)
   if (error) return { erro: 'Falha ao importar: ' + error.message }
