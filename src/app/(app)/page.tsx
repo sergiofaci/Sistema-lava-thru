@@ -3,7 +3,7 @@ import { requireUsuario } from '@/lib/auth'
 import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { Card, inputClass, btnPrimary, Badge } from '@/components/ui'
-import { BarsCard, TrendChart, YoYChart, TicketChart } from '@/components/charts'
+import { BarsCard, TrendChart, YoYChart, TicketChart, RecorrenciaChart } from '@/components/charts'
 import Link from 'next/link'
 import { formatBRL, formatQtd, round2 } from '@/lib/money'
 
@@ -232,10 +232,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const histPorMes = new Map<string, number>()
   const histLavVal = new Map<string, number>()
   const histLavQtd = new Map<string, number>()
+  const histAssin = new Map<string, number>()
   for (const h of historico) {
     const k = String(h.mes).slice(0, 7)
     histPorMes.set(k, round2((histPorMes.get(k) ?? 0) + Number(h.valor)))
-    if (h.categoria !== 'assinatura') {
+    if (h.categoria === 'assinatura') {
+      histAssin.set(k, round2((histAssin.get(k) ?? 0) + Number(h.valor)))
+    } else {
       histLavVal.set(k, round2((histLavVal.get(k) ?? 0) + Number(h.valor)))
       histLavQtd.set(k, (histLavQtd.get(k) ?? 0) + Number(h.quantidade))
     }
@@ -278,6 +281,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Ano a ano do mês atual.
   const baseYoY = fatMesKey(yoyKey)
   const variacaoAno = baseYoY > 0 ? ((fatMes - baseYoY) / baseYoY) * 100 : null
+
+  // Recorrência (12 meses): lavagem x assinatura.
+  const meses12 = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Y, M - 12 + i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+    return { key, label }
+  })
+  const recorrencia = meses12.map((m) => ({
+    mes: m.label,
+    lavagem: round2((fechFatMes.get(m.key) ?? 0) + (histLavVal.get(m.key) ?? 0)),
+    assinatura: round2(histAssin.get(m.key) ?? 0),
+  }))
+  const lavMesAtual = round2((fechFatMes.get(mes) ?? 0) + (histLavVal.get(mes) ?? 0))
+  const assinMesAtual = round2(histAssin.get(mes) ?? 0)
+  const totRecMes = round2(lavMesAtual + assinMesAtual)
+  const pctRecorrente = totRecMes > 0 ? (assinMesAtual / totRecMes) * 100 : null
 
   const resultado = round2(fatMes - despesasMes)
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
@@ -367,6 +387,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {/* Ticket médio no tempo */}
         <Painel titulo="Ticket médio" sub="Faturamento de lavagem ÷ nº de lavagens (6 meses)" full>
           <TicketChart data={ticketTrend} />
+        </Painel>
+
+        {/* Recorrência: lavagens x assinaturas */}
+        <Painel
+          titulo="Receita: lavagens × assinaturas"
+          sub={
+            pctRecorrente === null
+              ? 'Composição mensal (12 meses)'
+              : `Composição mensal · ${pctRecorrente.toFixed(1)}% de receita recorrente no mês`
+          }
+          full
+        >
+          <RecorrenciaChart data={recorrencia} />
         </Painel>
 
         {/* Faturamento por forma */}
