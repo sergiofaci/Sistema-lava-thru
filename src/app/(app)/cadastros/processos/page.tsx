@@ -4,25 +4,21 @@ import { createClient } from '@/lib/supabase/server'
 import { CrudManager } from '@/components/CrudManager'
 import { crudInserir, crudAtualizar, crudToggle, crudExcluir } from '@/lib/crud-helpers'
 
-const ROTA = '/cadastros/tipos-lavagem'
-const TABELA = 'tipos_lavagem'
-const ROTULO = 'Tipo de lavagem'
-
-// Escopo de módulo: server actions inline não podem capturar função local.
-const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico' : 'lavagem')
+const ROTA = '/cadastros/processos'
+const TABELA = 'processos'
+const ROTULO = 'Processo'
 
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
-  const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, ativo').order('ordem')
+  const { data } = await s.from(TABELA).select('id, nome, ordem, ativo').order('ordem')
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
-    const categoria = normCategoria(fd.get('categoria'))
-    const r = await crudInserir(TABELA, { nome, ordem, categoria }, ROTULO)
+    const r = await crudInserir(TABELA, { nome, ordem }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -32,8 +28,7 @@ export default async function Page() {
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
-    const categoria = normCategoria(fd.get('categoria'))
-    const r = await crudAtualizar(TABELA, id, { nome, ordem, categoria }, ROTULO)
+    const r = await crudAtualizar(TABELA, id, { nome, ordem }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -52,22 +47,10 @@ export default async function Page() {
 
   return (
     <CrudManager
-      titulo="Tipos de Lavagem"
-      descricao="Serviços registrados por quantidade no fechamento de caixa. Os processos que compõem cada lavagem são definidos em Composição das Lavagens."
+      titulo="Processos das Lavagens"
+      descricao="Itens/adicionais que compõem as lavagens (ex.: Shampoo, Cera secante). Depois, defina a composição de cada lavagem em Composição das Lavagens."
       fields={[
-        { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Premium' },
-        {
-          name: 'categoria',
-          label: 'Categoria',
-          type: 'select',
-          required: true,
-          defaultValue: 'lavagem',
-          hint: 'Serviço não conta como lavagem',
-          options: [
-            { value: 'lavagem', label: 'Lavagem' },
-            { value: 'servico', label: 'Serviço adicional' },
-          ],
-        },
+        { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Cera secante' },
         { name: 'ordem', label: 'Ordem', type: 'number', defaultValue: 0, hint: 'Exibição' },
       ]}
       itens={data ?? []}
