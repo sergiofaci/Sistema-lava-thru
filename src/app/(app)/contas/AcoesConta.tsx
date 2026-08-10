@@ -6,11 +6,13 @@ import { ORIGENS_PAGAMENTO } from '@/lib/types'
 import { atualizarConta, excluirConta, type ContaState } from './actions'
 
 type Opt = { id: string; nome: string }
+type Forn = { id: string; razao_social: string }
 export type ContaEdit = {
   id: string
   unidade_id: string
   centro_custo_id: string
   tipo_despesa_id: string
+  fornecedor_id: string | null
   data: string
   numero_nota: string | null
   valor: number
@@ -21,12 +23,14 @@ export function AcoesConta({
   centros,
   tipos,
   unidades,
+  fornecedores,
   origem,
 }: {
   conta: ContaEdit
   centros: Opt[]
   tipos: Opt[]
   unidades: Opt[] | null
+  fornecedores: Forn[]
   origem: string
 }) {
   const [editar, setEditar] = useState(false)
@@ -51,7 +55,15 @@ export function AcoesConta({
         Excluir
       </button>
       {editar && (
-        <EditarModal conta={conta} centros={centros} tipos={tipos} unidades={unidades} origem={origem} onClose={() => setEditar(false)} />
+        <EditarModal
+          conta={conta}
+          centros={centros}
+          tipos={tipos}
+          unidades={unidades}
+          fornecedores={fornecedores}
+          origem={origem}
+          onClose={() => setEditar(false)}
+        />
       )}
     </div>
   )
@@ -62,6 +74,7 @@ function EditarModal({
   centros,
   tipos,
   unidades,
+  fornecedores,
   origem,
   onClose,
 }: {
@@ -69,6 +82,7 @@ function EditarModal({
   centros: Opt[]
   tipos: Opt[]
   unidades: Opt[] | null
+  fornecedores: Forn[]
   origem: string
   onClose: () => void
 }) {
@@ -94,6 +108,16 @@ function EditarModal({
               </select>
             </Field>
           )}
+          <Field label="Fornecedor" htmlFor="e-fornecedor">
+            <select id="e-fornecedor" name="fornecedor_id" defaultValue={conta.fornecedor_id ?? ''} className={inputClass}>
+              <option value="">— Sem fornecedor —</option>
+              {fornecedores.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.razao_social}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Centro de custo" htmlFor="e-centro">
             <select id="e-centro" name="centro_custo_id" defaultValue={conta.centro_custo_id} className={inputClass}>
               {centros.map((c) => (

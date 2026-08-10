@@ -23,6 +23,7 @@ function parseConta(usuario: UsuarioComUnidade, formData: FormData) {
     numero_nota: String(formData.get('numero_nota') ?? '').trim() || null,
     valor: parseBRL(String(formData.get('valor') ?? '')),
     origem_pagamento: String(formData.get('origem_pagamento') ?? '').trim(),
+    fornecedor_id: String(formData.get('fornecedor_id') ?? '').trim() || null,
   }
 }
 
@@ -73,4 +74,39 @@ export async function excluirConta(formData: FormData): Promise<ContaState> {
   if (error) return { erro: 'Falha ao excluir: ' + error.message }
   revalidatePath('/contas')
   return {}
+}
+
+export type FornecedorRapido = { id: string; razao_social: string }
+
+// Cadastro rápido de fornecedor a partir do lançamento (admin/gerente do módulo contas).
+export async function criarFornecedorRapido(payload: {
+  razao_social: string
+  categoria?: string
+  cnpj?: string
+  contato?: string
+  telefone?: string
+  email?: string
+}): Promise<{ ok?: FornecedorRapido; erro?: string }> {
+  await requireModulo('contas')
+  const razao_social = String(payload?.razao_social ?? '').trim()
+  if (!razao_social) return { erro: 'Informe a razão social.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('fornecedores')
+    .insert({
+      razao_social,
+      categoria: String(payload.categoria ?? '').trim() || null,
+      cnpj: String(payload.cnpj ?? '').trim() || null,
+      contato: String(payload.contato ?? '').trim() || null,
+      telefone: String(payload.telefone ?? '').trim() || null,
+      email: String(payload.email ?? '').trim() || null,
+    })
+    .select('id, razao_social')
+    .single()
+  if (error) {
+    if (error.code === '23505') return { erro: 'Já existe um fornecedor com esse CNPJ.' }
+    return { erro: 'Falha ao cadastrar fornecedor: ' + error.message }
+  }
+  revalidatePath('/contas')
+  return { ok: data as FornecedorRapido }
 }

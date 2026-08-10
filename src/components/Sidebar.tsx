@@ -28,6 +28,7 @@ const CADASTROS = [
   { href: '/cadastros/metas', label: 'Metas' },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo' },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa' },
+  { href: '/cadastros/fornecedores', label: 'Fornecedores' },
   { href: '/cadastros/produtos', label: 'Produtos' },
   { href: '/cadastros/locais-uso', label: 'Locais de Uso' },
 ]
