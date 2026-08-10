@@ -103,6 +103,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: fechAnoData },
     { data: contasTrendData },
     { data: historicoData },
+    { data: fechUniData },
+    { data: contasUniData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -144,6 +146,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .gte('mes', histInicio)
         .lte('mes', `${mes}-01`),
     ),
+    supabase
+      .from('fechamentos_caixa')
+      .select('unidade_id, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, lavagens:fechamento_lavagens(quantidade)')
+      .gte('data', mesInicio)
+      .lte('data', mesFim),
+    supabase.from('contas_pagas').select('unidade_id, valor').gte('data', mesInicio).lte('data', mesFim),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
@@ -299,6 +307,37 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const totRecMes = round2(lavMesAtual + assinMesAtual)
   const pctRecorrente = totRecMes > 0 ? (assinMesAtual / totRecMes) * 100 : null
 
+  // Comparativo entre unidades (mês atual) — só admin sem filtro de unidade.
+  const mostrarUnidades = usuario.papel === 'admin' && !unidadeFiltro
+  const nomeUni = new Map((unidadesRes.data ?? []).map((u) => [u.id, u.nome]))
+  const aggUni = new Map<string, { fat: number; desp: number; qtd: number }>()
+  if (mostrarUnidades) {
+    for (const f of (fechUniData ?? []) as (FechRow & { unidade_id: string })[]) {
+      const a = aggUni.get(f.unidade_id) ?? { fat: 0, desp: 0, qtd: 0 }
+      a.fat = round2(a.fat + faturamento(f))
+      a.qtd += (f.lavagens ?? []).reduce((s, l) => s + (l.quantidade || 0), 0)
+      aggUni.set(f.unidade_id, a)
+    }
+    for (const c of (contasUniData ?? []) as { unidade_id: string; valor: number }[]) {
+      const a = aggUni.get(c.unidade_id) ?? { fat: 0, desp: 0, qtd: 0 }
+      a.desp = round2(a.desp + Number(c.valor))
+      aggUni.set(c.unidade_id, a)
+    }
+  }
+  const comparativoUni = [...aggUni.entries()]
+    .map(([id, a]) => {
+      const resultado = round2(a.fat - a.desp)
+      return {
+        nome: nomeUni.get(id) ?? '—',
+        fat: a.fat,
+        desp: a.desp,
+        resultado,
+        margem: a.fat > 0 ? (resultado / a.fat) * 100 : null,
+        ticket: a.qtd > 0 ? round2(a.fat / a.qtd) : 0,
+      }
+    })
+    .sort((x, y) => y.fat - x.fat)
+
   const resultado = round2(fatMes - despesasMes)
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
   const ticketMedio = totalLavMes > 0 ? round2(fatMes / totalLavMes) : 0
@@ -401,6 +440,42 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         >
           <RecorrenciaChart data={recorrencia} />
         </Painel>
+
+        {/* Comparativo entre unidades (admin, todas) */}
+        {mostrarUnidades && comparativoUni.length > 1 && (
+          <Painel titulo="Comparativo entre unidades" sub="Mês atual" full>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2 pr-4 font-medium">Unidade</th>
+                    <th className="py-2 px-4 text-right font-medium">Faturamento</th>
+                    <th className="py-2 px-4 text-right font-medium">Despesas</th>
+                    <th className="py-2 px-4 text-right font-medium">Resultado</th>
+                    <th className="py-2 px-4 text-right font-medium">Margem</th>
+                    <th className="py-2 pl-4 text-right font-medium">Ticket médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparativoUni.map((u) => (
+                    <tr key={u.nome} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 pr-4 font-medium text-slate-700">{u.nome}</td>
+                      <td className="py-2 px-4 text-right text-slate-700">{formatBRL(u.fat)}</td>
+                      <td className="py-2 px-4 text-right text-danger">{formatBRL(u.desp)}</td>
+                      <td className={`py-2 px-4 text-right font-medium ${u.resultado >= 0 ? 'text-success' : 'text-danger'}`}>
+                        {formatBRL(u.resultado)}
+                      </td>
+                      <td className="py-2 px-4 text-right text-slate-500">
+                        {u.margem === null ? '—' : `${u.margem.toFixed(1)}%`}
+                      </td>
+                      <td className="py-2 pl-4 text-right text-slate-500">{formatBRL(u.ticket)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Painel>
+        )}
 
         {/* Faturamento por forma */}
         <Painel titulo="Faturamento por forma de pagamento" sub="No mês">
