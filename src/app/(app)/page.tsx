@@ -3,7 +3,7 @@ import { requireUsuario } from '@/lib/auth'
 import { modulosDoUsuario } from '@/lib/permissoes'
 import { createClient } from '@/lib/supabase/server'
 import { Card, inputClass, btnPrimary, Badge } from '@/components/ui'
-import { BarsCard, TrendChart } from '@/components/charts'
+import { BarsCard, TrendChart, YoYChart, TicketChart } from '@/components/charts'
 import Link from 'next/link'
 import { formatBRL, formatQtd, round2 } from '@/lib/money'
 
@@ -77,13 +77,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return { key, label }
   })
 
-  // Comparação ano a ano: mesmo mês do ano anterior.
+  // Comparação ano a ano: janela do ano anterior inteiro até o mês atual.
   const anoAnt = Y - 1
   const mm = String(M).padStart(2, '0')
   const yoyKey = `${anoAnt}-${mm}`
-  const yoyInicio = `${yoyKey}-01`
-  const yoyFim = `${yoyKey}-${String(new Date(anoAnt, M, 0).getDate()).padStart(2, '0')}`
-  const histInicio = `${yoyKey}-01` // cobre a janela do YoY e do trend
+  const anoRangeInicio = `${anoAnt}-01-01` // 1º de janeiro do ano anterior
+  const histInicio = `${anoAnt}-01-01`
 
   const unidadeFiltro = usuario.papel === 'admin' ? (sp.unidade || '') : ''
   const aplicarUnidade = <T,>(q: T): T => {
@@ -101,10 +100,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: fechAntData },
     { data: contasData },
     { data: saidasData },
-    { data: fechTrendData },
+    { data: fechAnoData },
     { data: contasTrendData },
     { data: historicoData },
-    { data: fechYoYData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -134,20 +132,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     aplicarUnidade(
       supabase
         .from('fechamentos_caixa')
-        .select('data, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
-        .gte('data', trendInicio)
+        .select('data, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, lavagens:fechamento_lavagens(quantidade)')
+        .gte('data', anoRangeInicio)
         .lte('data', mesFim),
     ),
     aplicarUnidade(supabase.from('contas_pagas').select('data, valor').gte('data', trendInicio).lte('data', mesFim)),
     aplicarUnidade(
-      supabase.from('faturamento_historico').select('mes, valor').gte('mes', histInicio).lte('mes', `${mes}-01`),
-    ),
-    aplicarUnidade(
       supabase
-        .from('fechamentos_caixa')
-        .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
-        .gte('data', yoyInicio)
-        .lte('data', yoyFim),
+        .from('faturamento_historico')
+        .select('mes, valor, quantidade, categoria')
+        .gte('mes', histInicio)
+        .lte('mes', `${mes}-01`),
     ),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
@@ -221,29 +216,67 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .sort((a, b) => b.valor - a.valor)
   const consumoTotal = round2(consumo.reduce((s, c) => s + c.valor, 0))
 
-  // Evolução mensal (6 meses): faturamento, despesas e resultado por mês
-  const fechTrend = (fechTrendData ?? []) as (FechRow & { data: string })[]
-  const contasTrend = (contasTrendData ?? []) as { data: string; valor: number }[]
-  // Faturamento histórico importado, somado por mês (YYYY-MM).
-  const historico = (historicoData ?? []) as { mes: string; valor: number }[]
+  // Faturamento e nº de lavagens dos fechamentos, por mês (YYYY-MM).
+  const fechAno = (fechAnoData ?? []) as (FechRow & { data: string })[]
+  const fechFatMes = new Map<string, number>()
+  const fechQtdMes = new Map<string, number>()
+  for (const f of fechAno) {
+    const k = f.data.slice(0, 7)
+    fechFatMes.set(k, round2((fechFatMes.get(k) ?? 0) + faturamento(f)))
+    const q = (f.lavagens ?? []).reduce((s, l) => s + (l.quantidade || 0), 0)
+    fechQtdMes.set(k, (fechQtdMes.get(k) ?? 0) + q)
+  }
+
+  // Histórico importado por mês: valor total, e (só lavagens) valor+quantidade.
+  const historico = (historicoData ?? []) as { mes: string; valor: number; quantidade: number; categoria: string }[]
   const histPorMes = new Map<string, number>()
+  const histLavVal = new Map<string, number>()
+  const histLavQtd = new Map<string, number>()
   for (const h of historico) {
     const k = String(h.mes).slice(0, 7)
     histPorMes.set(k, round2((histPorMes.get(k) ?? 0) + Number(h.valor)))
+    if (h.categoria !== 'assinatura') {
+      histLavVal.set(k, round2((histLavVal.get(k) ?? 0) + Number(h.valor)))
+      histLavQtd.set(k, (histLavQtd.get(k) ?? 0) + Number(h.quantidade))
+    }
   }
+  const fatMesKey = (k: string) => round2((fechFatMes.get(k) ?? 0) + (histPorMes.get(k) ?? 0))
 
+  const contasTrend = (contasTrendData ?? []) as { data: string; valor: number }[]
   const trend = mesesTrend.map((m) => {
-    const fatFech = fechTrend.filter((f) => f.data.startsWith(m.key)).reduce((s, f) => s + faturamento(f), 0)
-    const fat = round2(fatFech + (histPorMes.get(m.key) ?? 0))
-    const desp = round2(
-      contasTrend.filter((c) => c.data.startsWith(m.key)).reduce((s, c) => s + c.valor, 0),
-    )
+    const fat = fatMesKey(m.key)
+    const desp = round2(contasTrend.filter((c) => c.data.startsWith(m.key)).reduce((s, c) => s + c.valor, 0))
     return { mes: m.label, faturamento: fat, despesas: desp, resultado: round2(fat - desp) }
   })
 
-  // Comparação ano a ano do mês atual (fechamentos + histórico do ano anterior).
-  const fechYoY = (fechYoYData ?? []) as FechRow[]
-  const baseYoY = round2(fechYoY.reduce((s, f) => s + faturamento(f), 0) + (histPorMes.get(yoyKey) ?? 0))
+  // Ticket médio (12/6 meses): faturamento de lavagem ÷ nº de lavagens.
+  const ticketTrend = mesesTrend.map((m) => {
+    const fatLav = round2((fechFatMes.get(m.key) ?? 0) + (histLavVal.get(m.key) ?? 0))
+    const qtd = (fechQtdMes.get(m.key) ?? 0) + (histLavQtd.get(m.key) ?? 0)
+    return { mes: m.label, valor: qtd > 0 ? round2(fatLav / qtd) : 0 }
+  })
+
+  // Ano a ano (12 meses) e acumulado do ano (YTD).
+  const MES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  const yoy = Array.from({ length: 12 }, (_, i) => {
+    const mmm = String(i + 1).padStart(2, '0')
+    const atual = fatMesKey(`${Y}-${mmm}`)
+    const anterior = fatMesKey(`${anoAnt}-${mmm}`)
+    return { mes: MES_ABREV[i], anterior: anterior || null, atual: i + 1 <= M ? atual || null : null }
+  })
+  let ytdAtual = 0
+  let ytdAnt = 0
+  for (let i = 1; i <= M; i++) {
+    const mmm = String(i).padStart(2, '0')
+    ytdAtual += fatMesKey(`${Y}-${mmm}`)
+    ytdAnt += fatMesKey(`${anoAnt}-${mmm}`)
+  }
+  ytdAtual = round2(ytdAtual)
+  ytdAnt = round2(ytdAnt)
+  const variacaoYtd = ytdAnt > 0 ? ((ytdAtual - ytdAnt) / ytdAnt) * 100 : null
+
+  // Ano a ano do mês atual.
+  const baseYoY = fatMesKey(yoyKey)
   const variacaoAno = baseYoY > 0 ? ((fatMes - baseYoY) / baseYoY) * 100 : null
 
   const resultado = round2(fatMes - despesasMes)
@@ -316,6 +349,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {/* Evolução mensal */}
         <Painel titulo="Evolução — faturamento, despesas e resultado" sub="Últimos 6 meses (inclui histórico importado)" full>
           <TrendChart data={trend} />
+        </Painel>
+
+        {/* Ano a ano */}
+        <Painel
+          titulo={`Faturamento — ${Y} × ${anoAnt}`}
+          sub={
+            variacaoYtd === null
+              ? `Acumulado ${Y}: ${formatBRL(ytdAtual)}`
+              : `Acumulado ${Y}: ${formatBRL(ytdAtual)} · ${variacaoYtd >= 0 ? '▲' : '▼'} ${Math.abs(variacaoYtd).toFixed(1)}% vs. ${anoAnt} (${formatBRL(ytdAnt)})`
+          }
+          full
+        >
+          <YoYChart data={yoy} labelAtual={String(Y)} labelAnterior={String(anoAnt)} />
+        </Painel>
+
+        {/* Ticket médio no tempo */}
+        <Painel titulo="Ticket médio" sub="Faturamento de lavagem ÷ nº de lavagens (6 meses)" full>
+          <TicketChart data={ticketTrend} />
         </Painel>
 
         {/* Faturamento por forma */}

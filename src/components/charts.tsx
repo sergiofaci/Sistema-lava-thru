@@ -93,3 +93,59 @@ export function TrendChart({ data }: { data: MesPonto[] }) {
     </ResponsiveContainer>
   )
 }
+
+type YoYPonto = { mes: string; atual: number | null; anterior: number | null }
+
+// Comparação ano a ano: barras do ano atual x ano anterior, por mês.
+export function YoYChart({
+  data,
+  labelAtual,
+  labelAnterior,
+}: {
+  data: YoYPonto[]
+  labelAtual: string
+  labelAnterior: string
+}) {
+  if (data.every((d) => !d.atual && !d.anterior)) {
+    return <p className="py-8 text-center text-sm text-slate-400">Sem dados para comparar.</p>
+  }
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+        <CartesianGrid vertical={false} stroke="#eef2f7" />
+        <XAxis dataKey="mes" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#475569' }} />
+        <YAxis width={56} tickFormatter={(v) => compacto(Number(v))} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+        <Tooltip
+          formatter={(v: ReactNode, n: ReactNode) => [formatBRL(Number(v)), String(n)]}
+          cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar dataKey="anterior" name={labelAnterior} fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={22} />
+        <Bar dataKey="atual" name={labelAtual} fill="#0d1d60" radius={[4, 4, 0, 0]} maxBarSize={22} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+// Tendência de um valor (linha), formato BRL.
+export function TicketChart({ data }: { data: { mes: string; valor: number }[] }) {
+  if (data.every((d) => !d.valor)) {
+    return <p className="py-8 text-center text-sm text-slate-400">Sem dados no período.</p>
+  }
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+        <CartesianGrid vertical={false} stroke="#eef2f7" />
+        <XAxis dataKey="mes" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#475569' }} />
+        <YAxis width={56} tickFormatter={(v) => compacto(Number(v))} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+        <Tooltip
+          formatter={(v: ReactNode) => [formatBRL(Number(v)), 'Ticket médio']}
+          cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+        />
+        <Line type="monotone" dataKey="valor" name="Ticket médio" stroke="#0d1d60" strokeWidth={2} dot={{ r: 3 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
