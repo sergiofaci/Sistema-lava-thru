@@ -105,6 +105,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: historicoData },
     { data: fechUniData },
     { data: contasUniData },
+    { data: metaData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -152,6 +153,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       .gte('data', mesInicio)
       .lte('data', mesFim),
     supabase.from('contas_pagas').select('unidade_id, valor').gte('data', mesInicio).lte('data', mesFim),
+    aplicarUnidade(supabase.from('metas').select('valor_meta').eq('mes', `${mes}-01`)),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
@@ -341,6 +343,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const resultado = round2(fatMes - despesasMes)
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
   const ticketMedio = totalLavMes > 0 ? round2(fatMes / totalLavMes) : 0
+
+  // Meta e projeção do mês.
+  const metaMes = round2(((metaData ?? []) as { valor_meta: number }[]).reduce((s, m) => s + Number(m.valor_meta), 0))
+  const pctMeta = metaMes > 0 ? (fatMes / metaMes) * 100 : null
+  const ehMesAtual = mes === hoje.slice(0, 7)
+  const diasNoMes = new Date(Y, M, 0).getDate()
+  const diaAtual = ehMesAtual ? Number(hoje.slice(8, 10)) : diasNoMes
+  const projecao = ehMesAtual && diaAtual > 0 ? round2((fatMes / diaAtual) * diasNoMes) : fatMes
+  const pctProjMeta = metaMes > 0 ? (projecao / metaMes) * 100 : null
   const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
     new Date(Y, M - 1, 1),
   )
@@ -403,6 +414,35 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           destaque={resultado >= 0 ? 'success' : 'danger'}
         />
       </div>
+
+      {metaMes > 0 && (
+        <Card className="mb-6">
+          <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-brand-dark">Meta do mês</h2>
+              <p className="text-xs text-slate-500">
+                Meta {formatBRL(metaMes)} · realizado {formatBRL(fatMes)}
+                {ehMesAtual && <> · projeção {formatBRL(projecao)}</>}
+              </p>
+            </div>
+            <span className={`text-2xl font-bold ${(pctMeta ?? 0) >= 100 ? 'text-success' : 'text-brand-dark'}`}>
+              {pctMeta === null ? '—' : `${pctMeta.toFixed(0)}%`}
+            </span>
+          </div>
+          <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={`h-full rounded-full ${(pctMeta ?? 0) >= 100 ? 'bg-success' : 'bg-brand'}`}
+              style={{ width: `${Math.min(100, Math.max(0, pctMeta ?? 0))}%` }}
+            />
+          </div>
+          {ehMesAtual && pctProjMeta !== null && (
+            <p className="mt-2 text-xs text-slate-500">
+              No ritmo atual ({diaAtual}/{diasNoMes} dias), a projeção atinge{' '}
+              <span className={pctProjMeta >= 100 ? 'text-success' : 'text-warning'}>{pctProjMeta.toFixed(0)}% da meta</span>.
+            </p>
+          )}
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Evolução mensal */}
