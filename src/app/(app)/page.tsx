@@ -77,6 +77,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return { key, label }
   })
 
+  // Comparação ano a ano: mesmo mês do ano anterior.
+  const anoAnt = Y - 1
+  const mm = String(M).padStart(2, '0')
+  const yoyKey = `${anoAnt}-${mm}`
+  const yoyInicio = `${yoyKey}-01`
+  const yoyFim = `${yoyKey}-${String(new Date(anoAnt, M, 0).getDate()).padStart(2, '0')}`
+  const histInicio = `${yoyKey}-01` // cobre a janela do YoY e do trend
+
   const unidadeFiltro = usuario.papel === 'admin' ? (sp.unidade || '') : ''
   const aplicarUnidade = <T,>(q: T): T => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,6 +103,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: saidasData },
     { data: fechTrendData },
     { data: contasTrendData },
+    { data: historicoData },
+    { data: fechYoYData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -129,6 +139,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .lte('data', mesFim),
     ),
     aplicarUnidade(supabase.from('contas_pagas').select('data, valor').gte('data', trendInicio).lte('data', mesFim)),
+    aplicarUnidade(
+      supabase.from('faturamento_historico').select('mes, valor').gte('mes', histInicio).lte('mes', `${mes}-01`),
+    ),
+    aplicarUnidade(
+      supabase
+        .from('fechamentos_caixa')
+        .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
+        .gte('data', yoyInicio)
+        .lte('data', yoyFim),
+    ),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
@@ -204,15 +224,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Evolução mensal (6 meses): faturamento, despesas e resultado por mês
   const fechTrend = (fechTrendData ?? []) as (FechRow & { data: string })[]
   const contasTrend = (contasTrendData ?? []) as { data: string; valor: number }[]
+  // Faturamento histórico importado, somado por mês (YYYY-MM).
+  const historico = (historicoData ?? []) as { mes: string; valor: number }[]
+  const histPorMes = new Map<string, number>()
+  for (const h of historico) {
+    const k = String(h.mes).slice(0, 7)
+    histPorMes.set(k, round2((histPorMes.get(k) ?? 0) + Number(h.valor)))
+  }
+
   const trend = mesesTrend.map((m) => {
-    const fat = round2(
-      fechTrend.filter((f) => f.data.startsWith(m.key)).reduce((s, f) => s + faturamento(f), 0),
-    )
+    const fatFech = fechTrend.filter((f) => f.data.startsWith(m.key)).reduce((s, f) => s + faturamento(f), 0)
+    const fat = round2(fatFech + (histPorMes.get(m.key) ?? 0))
     const desp = round2(
       contasTrend.filter((c) => c.data.startsWith(m.key)).reduce((s, c) => s + c.valor, 0),
     )
     return { mes: m.label, faturamento: fat, despesas: desp, resultado: round2(fat - desp) }
   })
+
+  // Comparação ano a ano do mês atual (fechamentos + histórico do ano anterior).
+  const fechYoY = (fechYoYData ?? []) as FechRow[]
+  const baseYoY = round2(fechYoY.reduce((s, f) => s + faturamento(f), 0) + (histPorMes.get(yoyKey) ?? 0))
+  const variacaoAno = baseYoY > 0 ? ((fatMes - baseYoY) / baseYoY) * 100 : null
 
   const resultado = round2(fatMes - despesasMes)
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
@@ -263,6 +295,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 </span>
               )}
               <span className="block">Ticket médio: {formatBRL(ticketMedio)}</span>
+              {variacaoAno !== null && (
+                <span className={`block ${variacaoAno >= 0 ? 'text-success' : 'text-danger'}`}>
+                  {variacaoAno >= 0 ? '▲' : '▼'} {Math.abs(variacaoAno).toFixed(1)}% vs. {mm}/{anoAnt}
+                </span>
+              )}
             </>
           }
         />
@@ -277,7 +314,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Evolução mensal */}
-        <Painel titulo="Evolução — faturamento, despesas e resultado" sub="Últimos 6 meses" full>
+        <Painel titulo="Evolução — faturamento, despesas e resultado" sub="Últimos 6 meses (inclui histórico importado)" full>
           <TrendChart data={trend} />
         </Painel>
 
