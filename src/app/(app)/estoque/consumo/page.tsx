@@ -15,6 +15,7 @@ function rel(r: unknown, campo = 'nome'): string {
 }
 
 type SaidaRow = {
+  data: string
   quantidade: number
   valor_total: number | null
   produto_id: string
@@ -44,7 +45,7 @@ export default async function ConsumoPage({ searchParams }: { searchParams: Prom
   let q = supabase
     .from('estoque_saidas')
     .select(
-      'quantidade, valor_total, produto_id, unidade_id, local_uso_id, produto:produtos(nome, unidade_medida), unidade:unidades(nome), local:locais_uso(nome)',
+      'data, quantidade, valor_total, produto_id, unidade_id, local_uso_id, produto:produtos(nome, unidade_medida), unidade:unidades(nome), local:locais_uso(nome)',
     )
     .gte('data', mesInicio)
     .lte('data', mesFim)
@@ -75,12 +76,33 @@ export default async function ConsumoPage({ searchParams }: { searchParams: Prom
         qtd: 0,
         valor: 0,
       }
-    item.qtd = round2(item.qtd + Number(s.quantidade))
-    item.valor = round2(item.valor + Number(s.valor_total ?? 0))
+    // Soma sem arredondar a cada passo (quantidade pode ter 3 casas).
+    item.qtd = item.qtd + Number(s.quantidade)
+    item.valor = item.valor + Number(s.valor_total ?? 0)
     mapa.set(chave, item)
   }
-  const linhas = [...mapa.values()].sort((a, b) => b.valor - a.valor)
+  const round3 = (n: number) => Math.round(n * 1000) / 1000
+  const linhas = [...mapa.values()]
+    .map((l) => ({ ...l, qtd: round3(l.qtd), valor: round2(l.valor) }))
+    .sort((a, b) => b.valor - a.valor)
   const totalValor = round2(linhas.reduce((s, l) => s + l.valor, 0))
+
+  // Detalhe: cada baixa do período, para reconciliar com a quantidade.
+  const dataBR = (iso: string) => {
+    const [y, m, d] = String(iso).slice(0, 10).split('-')
+    return `${d}/${m}/${y}`
+  }
+  const detalhe = saidas
+    .map((s) => ({
+      data: s.data,
+      produto: rel(s.produto),
+      medida: rel(s.produto, 'unidade_medida'),
+      unidade: rel(s.unidade),
+      local: rel(s.local),
+      qtd: Number(s.quantidade),
+      valor: Number(s.valor_total ?? 0),
+    }))
+    .sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : a.produto.localeCompare(b.produto)))
 
   const csv = toCSV([
     ['Consumo de estoque por produto', mesLabel],
@@ -189,6 +211,45 @@ export default async function ConsumoPage({ searchParams }: { searchParams: Prom
                   <td className="px-5 py-3 text-right text-slate-500">100%</td>
                 </tr>
               </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {detalhe.length > 0 && (
+        <Card className="mt-6 p-0">
+          <div className="border-b border-slate-200 px-5 py-3">
+            <h2 className="font-semibold text-brand-dark">Baixas do período (detalhado)</h2>
+            <p className="text-xs text-slate-500">
+              {detalhe.length} baixa(s) — a soma por produto acima vem exatamente destas linhas.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <th className="px-5 py-3 font-medium">Data</th>
+                  <th className="px-5 py-3 font-medium">Produto</th>
+                  {todasUnidades && <th className="px-5 py-3 font-medium">Unidade</th>}
+                  <th className="px-5 py-3 font-medium">Local</th>
+                  <th className="px-5 py-3 text-right font-medium">Qtd.</th>
+                  <th className="px-5 py-3 text-right font-medium">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detalhe.map((d, i) => (
+                  <tr key={i} className="border-b border-slate-100 last:border-0">
+                    <td className="px-5 py-3 text-slate-600">{dataBR(d.data)}</td>
+                    <td className="px-5 py-3 text-slate-700">{d.produto}</td>
+                    {todasUnidades && <td className="px-5 py-3 text-slate-600">{d.unidade}</td>}
+                    <td className="px-5 py-3 text-slate-500">{d.local}</td>
+                    <td className="px-5 py-3 text-right text-slate-600">
+                      {formatQtd(d.qtd)} {d.medida}
+                    </td>
+                    <td className="px-5 py-3 text-right text-slate-600">{formatBRL(d.valor)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </Card>
