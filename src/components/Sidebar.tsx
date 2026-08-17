@@ -26,6 +26,7 @@ const CADASTROS = [
   { href: '/cadastros/bonificacoes', label: 'Bonificações (regras)' },
   { href: '/cadastros/faturamento-historico', label: 'Histórico de Faturamento' },
   { href: '/cadastros/metas-item', label: 'Metas (por item)' },
+  { href: '/cadastros/painel-metas', label: 'Painel de Metas (visibilidade)' },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo' },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa' },
   { href: '/cadastros/fornecedores', label: 'Fornecedores' },
@@ -58,13 +59,12 @@ export function Sidebar({ papel, modulos }: { papel: Papel; modulos: string[] })
         <img src="/brand/logo-vertical.svg" alt="Lava Thru Car Wash" className="w-28" />
       </div>
       <div className="flex-1 overflow-y-auto">
-        {visiveis.length > 0 && (
-          <nav className="mb-6 space-y-1">
-            {visiveis.map((i) => (
-              <ItemLink key={i.href} href={i.href} label={i.label} pathname={pathname} />
-            ))}
-          </nav>
-        )}
+        <nav className="mb-6 space-y-1">
+          <ItemLink href="/painel" label="📊 Painel de Metas" pathname={pathname} />
+          {visiveis.map((i) => (
+            <ItemLink key={i.href} href={i.href} label={i.label} pathname={pathname} />
+          ))}
+        </nav>
 
         {papel === 'admin' && (
           <div>
