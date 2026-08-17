@@ -14,7 +14,14 @@ const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico'
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
-  const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, ativo').order('ordem')
+  const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, preco, ativo').order('ordem')
+
+  const precoNum = (v: unknown) => {
+    const s = String(v ?? '').trim().replace(/[R$\s]/g, '')
+    if (!s) return 0
+    const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
@@ -22,7 +29,8 @@ export default async function Page() {
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
     const categoria = normCategoria(fd.get('categoria'))
-    const r = await crudInserir(TABELA, { nome, ordem, categoria }, ROTULO)
+    const preco = precoNum(fd.get('preco'))
+    const r = await crudInserir(TABELA, { nome, ordem, categoria, preco }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -33,7 +41,8 @@ export default async function Page() {
     if (!nome) return { erro: 'Informe o nome.' }
     const ordem = Number(fd.get('ordem') ?? 0) || 0
     const categoria = normCategoria(fd.get('categoria'))
-    const r = await crudAtualizar(TABELA, id, { nome, ordem, categoria }, ROTULO)
+    const preco = precoNum(fd.get('preco'))
+    const r = await crudAtualizar(TABELA, id, { nome, ordem, categoria, preco }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -68,6 +77,7 @@ export default async function Page() {
             { value: 'servico', label: 'Serviço adicional' },
           ],
         },
+        { name: 'preco', label: 'Preço (R$)', type: 'number', defaultValue: 0, hint: 'Base da meta de faturamento' },
         { name: 'ordem', label: 'Ordem', type: 'number', defaultValue: 0, hint: 'Exibição' },
       ]}
       itens={data ?? []}
