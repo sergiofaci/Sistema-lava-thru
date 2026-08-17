@@ -26,6 +26,7 @@ const CADASTROS = [
   { href: '/cadastros/bonificacoes', label: 'Bonificações (regras)' },
   { href: '/cadastros/faturamento-historico', label: 'Histórico de Faturamento' },
   { href: '/cadastros/metas-item', label: 'Metas (por item)' },
+  { href: '/cadastros/orcamento', label: 'Orçamento de Despesas' },
   { href: '/cadastros/painel-metas', label: 'Painel de Metas (visibilidade)' },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo' },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa' },

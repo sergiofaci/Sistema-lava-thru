@@ -107,6 +107,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: contasUniData },
     { data: metaData },
     { data: metaItemData },
+    { data: orcamentoData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -157,6 +158,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     aplicarUnidade(supabase.from('metas').select('valor_meta').eq('mes', `${mes}-01`)),
     aplicarUnidade(
       supabase.from('metas_item').select('quantidade, tipo:tipos_lavagem(preco)').eq('mes', `${mes}-01`),
+    ),
+    aplicarUnidade(
+      supabase.from('orcamento_despesa').select('valor, tipo:tipos_despesa(nome)').eq('mes', `${mes}-01`),
     ),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
@@ -365,6 +369,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const diaAtual = ehMesAtual ? Number(hoje.slice(8, 10)) : diasNoMes
   const projecao = ehMesAtual && diaAtual > 0 ? round2((fatMes / diaAtual) * diasNoMes) : fatMes
   const pctProjMeta = metaMes > 0 ? (projecao / metaMes) * 100 : null
+
+  // Orçamento de despesas × realizado
+  const orcPorTipo = new Map<string, number>()
+  let orcTotal = 0
+  for (const o of (orcamentoData ?? []) as { valor: number; tipo: unknown }[]) {
+    const nome = rel(o.tipo)
+    orcPorTipo.set(nome, round2((orcPorTipo.get(nome) ?? 0) + Number(o.valor)))
+    orcTotal += Number(o.valor)
+  }
+  orcTotal = round2(orcTotal)
+  const realizadoPorTipo = new Map(despesasPorTipo.map((d) => [d.label, d.value]))
+  const orcComparativo = [...new Set([...realizadoPorTipo.keys(), ...orcPorTipo.keys()])]
+    .map((nome) => {
+      const orcado = orcPorTipo.get(nome) ?? 0
+      const realizado = realizadoPorTipo.get(nome) ?? 0
+      return { nome, orcado, realizado, dif: round2(orcado - realizado) }
+    })
+    .sort((a, b) => b.realizado - a.realizado)
+  const resultadoPlanejado = round2(metaMes - orcTotal)
   const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
     new Date(Y, M - 1, 1),
   )
@@ -454,6 +477,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <span className={pctProjMeta >= 100 ? 'text-success' : 'text-warning'}>{pctProjMeta.toFixed(0)}% da meta</span>.
             </p>
           )}
+        </Card>
+      )}
+
+      {(metaMes > 0 || orcTotal > 0) && (
+        <Card className="mb-6">
+          <h2 className="mb-3 font-semibold text-brand-dark">Planejado × Realizado</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <PlanReal label="Receita" planejado={metaMes} realizado={fatMes} maiorMelhor />
+            <PlanReal label="Despesas" planejado={orcTotal} realizado={despesasMes} maiorMelhor={false} />
+            <PlanReal label="Resultado" planejado={resultadoPlanejado} realizado={resultado} maiorMelhor />
+          </div>
         </Card>
       )}
 
@@ -602,6 +636,46 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           )}
         </Painel>
 
+        {/* Orçamento × realizado (despesas) */}
+        {orcTotal > 0 && (
+          <Painel titulo="Orçamento × realizado (despesas)" sub={`Orçado ${formatBRL(orcTotal)} · realizado ${formatBRL(despesasMes)}`} full>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2 pr-4 font-medium">Tipo de despesa</th>
+                    <th className="py-2 px-4 text-right font-medium">Orçado</th>
+                    <th className="py-2 px-4 text-right font-medium">Realizado</th>
+                    <th className="py-2 pl-4 text-right font-medium">Diferença</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orcComparativo.map((o) => (
+                    <tr key={o.nome} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 pr-4 text-slate-700">{o.nome}</td>
+                      <td className="py-2 px-4 text-right text-slate-500">{o.orcado > 0 ? formatBRL(o.orcado) : '—'}</td>
+                      <td className="py-2 px-4 text-right text-slate-700">{formatBRL(o.realizado)}</td>
+                      <td className={`py-2 pl-4 text-right font-medium ${o.dif >= 0 ? 'text-success' : 'text-danger'}`}>
+                        {o.orcado > 0 ? formatBRL(o.dif) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 font-semibold">
+                    <td className="py-2 pr-4 text-slate-700">Total</td>
+                    <td className="py-2 px-4 text-right text-slate-600">{formatBRL(orcTotal)}</td>
+                    <td className="py-2 px-4 text-right text-slate-800">{formatBRL(despesasMes)}</td>
+                    <td className={`py-2 pl-4 text-right ${orcTotal - despesasMes >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {formatBRL(round2(orcTotal - despesasMes))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Painel>
+        )}
+
         {/* Consumo de produtos */}
         <Painel
           titulo="Consumo de produtos"
@@ -654,6 +728,30 @@ function Stat({
       <p className={`mt-1 text-2xl font-bold ${cor}`}>{valor}</p>
       <p className="mt-1 text-xs text-slate-400">{sub}</p>
     </Card>
+  )
+}
+
+function PlanReal({
+  label,
+  planejado,
+  realizado,
+  maiorMelhor,
+}: {
+  label: string
+  planejado: number
+  realizado: number
+  maiorMelhor: boolean
+}) {
+  const pct = planejado !== 0 ? (realizado / planejado) * 100 : null
+  const bom = maiorMelhor ? realizado >= planejado : realizado <= planejado
+  const cor = pct === null ? 'text-slate-400' : bom ? 'text-success' : 'text-danger'
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-bold text-slate-800">{formatBRL(realizado)}</p>
+      <p className="text-xs text-slate-400">planejado {formatBRL(planejado)}</p>
+      {pct !== null && <p className={`mt-1 text-xs font-medium ${cor}`}>{pct.toFixed(0)}% do planejado</p>}
+    </div>
   )
 }
 

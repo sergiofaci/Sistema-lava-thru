@@ -85,7 +85,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     )
   }
 
-  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }] = await Promise.all([
+  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }, { data: orcData }, { data: contasData }] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, categoria, preco, ordem').eq('ativo', true).order('ordem'),
     supabase.from('metas_item').select('tipo_lavagem_id, quantidade').eq('unidade_id', unidadeId).eq('mes', mesInicio),
     supabase
@@ -96,6 +96,8 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       .lte('data', mesFim),
     supabase.from('painel_cargo_item').select('tipo_lavagem_id').eq('cargo', cargo === 'todos' ? '__none__' : cargo),
     supabase.from('painel_cargo_flags').select('ver_faturamento, ver_despesas').eq('cargo', cargo === 'todos' ? '__none__' : cargo).maybeSingle(),
+    supabase.from('orcamento_despesa').select('valor').eq('unidade_id', unidadeId).eq('mes', mesInicio),
+    supabase.from('contas_pagas').select('valor').eq('unidade_id', unidadeId).gte('data', mesInicio).lte('data', mesFim),
   ])
 
   const tiposList = (tipos ?? []) as { id: string; nome: string; categoria: string; preco: number; ordem: number }[]
@@ -123,6 +125,12 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   // Visibilidade
   const configurado = new Set((visItens ?? []).map((v) => v.tipo_lavagem_id))
   const verFaturamento = flags ? flags.ver_faturamento : true
+  const verDespesas = flags ? flags.ver_despesas : true
+
+  // Despesas: orçado × realizado no mês
+  const orcado = round2(((orcData ?? []) as { valor: number }[]).reduce((s, o) => s + Number(o.valor), 0))
+  const despReal = round2(((contasData ?? []) as { valor: number }[]).reduce((s, c) => s + Number(c.valor), 0))
+  const semDesp = orcado > 0 ? (despReal <= round2(orcado * fatorAcum) ? 'ok' : despReal <= orcado ? 'atencao' : 'baixo') : 'none'
 
   // Itens a mostrar: só os que têm meta; se cargo configurado, restringe.
   const itens = tiposList
@@ -209,6 +217,29 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
             <span className={TXT[semFat]}>
               {semFat === 'ok' ? 'no ritmo' : semFat === 'atencao' ? 'atenção' : 'abaixo do ritmo'}
             </span>
+          </p>
+        </Card>
+      )}
+
+      {verDespesas && orcado > 0 && (
+        <Card className="mb-6">
+          <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-brand-dark">Despesas (orçamento)</h2>
+              <p className="text-xs text-slate-500">
+                Orçado {formatBRL(orcado)} · realizado {formatBRL(despReal)}
+              </p>
+            </div>
+            <span className={`text-3xl font-bold ${TXT[semDesp]}`}>{((despReal / orcado) * 100).toFixed(0)}%</span>
+          </div>
+          <Barra pct={(despReal / orcado) * 100} cor={COR[semDesp]} />
+          <p className="mt-2 text-xs text-slate-500">
+            {semDesp === 'baixo' ? (
+              <span className="text-danger">acima do orçado</span>
+            ) : (
+              <span className="text-success">dentro do orçado</span>
+            )}{' '}
+            · resta {formatBRL(round2(orcado - despReal))}
           </p>
         </Card>
       )}
