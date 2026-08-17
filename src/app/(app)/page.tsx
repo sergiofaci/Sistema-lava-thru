@@ -106,6 +106,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: fechUniData },
     { data: contasUniData },
     { data: metaData },
+    { data: metaItemData },
     unidadesRes,
   ] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, ordem, categoria').order('ordem'),
@@ -154,6 +155,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       .lte('data', mesFim),
     supabase.from('contas_pagas').select('unidade_id, valor').gte('data', mesInicio).lte('data', mesFim),
     aplicarUnidade(supabase.from('metas').select('valor_meta').eq('mes', `${mes}-01`)),
+    aplicarUnidade(
+      supabase.from('metas_item').select('quantidade, tipo:tipos_lavagem(preco)').eq('mes', `${mes}-01`),
+    ),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
@@ -344,8 +348,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
   const ticketMedio = totalLavMes > 0 ? round2(fatMes / totalLavMes) : 0
 
-  // Meta e projeção do mês.
-  const metaMes = round2(((metaData ?? []) as { valor_meta: number }[]).reduce((s, m) => s + Number(m.valor_meta), 0))
+  // Meta e projeção do mês. Prioriza a meta por item (Σ qtd × preço); se
+  // não houver, usa a meta manual (tabela metas).
+  const metaManual = round2(((metaData ?? []) as { valor_meta: number }[]).reduce((s, m) => s + Number(m.valor_meta), 0))
+  const metaDerivada = round2(
+    ((metaItemData ?? []) as { quantidade: number; tipo: unknown }[]).reduce((s, m) => {
+      const t = Array.isArray(m.tipo) ? m.tipo[0] : m.tipo
+      const preco = Number((t as { preco?: number })?.preco ?? 0)
+      return s + Number(m.quantidade) * preco
+    }, 0),
+  )
+  const metaMes = metaDerivada > 0 ? metaDerivada : metaManual
   const pctMeta = metaMes > 0 ? (fatMes / metaMes) * 100 : null
   const ehMesAtual = mes === hoje.slice(0, 7)
   const diasNoMes = new Date(Y, M, 0).getDate()

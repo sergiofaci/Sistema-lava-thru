@@ -25,7 +25,7 @@ const CADASTROS = [
   { href: '/cadastros/lavagem-processos', label: 'Composição das Lavagens' },
   { href: '/cadastros/bonificacoes', label: 'Bonificações (regras)' },
   { href: '/cadastros/faturamento-historico', label: 'Histórico de Faturamento' },
-  { href: '/cadastros/metas', label: 'Metas' },
+  { href: '/cadastros/metas-item', label: 'Metas (por item)' },
   { href: '/cadastros/centros-custo', label: 'Centros de Custo' },
   { href: '/cadastros/tipos-despesa', label: 'Tipos de Despesa' },
   { href: '/cadastros/fornecedores', label: 'Fornecedores' },
