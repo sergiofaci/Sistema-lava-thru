@@ -73,9 +73,16 @@ export default async function FechamentosPage() {
         titulo="Fechamento de Caixa"
         descricao={verHistorico ? 'Histórico de fechamentos.' : 'Seu fechamento de hoje.'}
         acao={
-          <Link href="/fechamentos/novo" className={btnPrimary}>
-            + Novo fechamento
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {verHistorico && (
+              <Link href="/fechamentos/lavagens-dia" className="text-sm text-brand hover:underline">
+                📋 Lavagens por dia
+              </Link>
+            )}
+            <Link href="/fechamentos/novo" className={btnPrimary}>
+              + Novo fechamento
+            </Link>
+          </div>
         }
       />
 
