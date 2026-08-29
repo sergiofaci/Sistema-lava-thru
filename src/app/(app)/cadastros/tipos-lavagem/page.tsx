@@ -11,17 +11,17 @@ const ROTULO = 'Tipo de lavagem'
 // Escopo de módulo: server actions inline não podem capturar função local.
 const normCategoria = (v: unknown) => (String(v ?? '') === 'servico' ? 'servico' : 'lavagem')
 
+const precoNum = (v: unknown) => {
+  const s = String(v ?? '').trim().replace(/[R$\s]/g, '')
+  if (!s) return 0
+  const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
   const { data } = await s.from(TABELA).select('id, nome, ordem, categoria, preco, ativo').order('ordem')
-
-  const precoNum = (v: unknown) => {
-    const s = String(v ?? '').trim().replace(/[R$\s]/g, '')
-    if (!s) return 0
-    const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s)
-    return Number.isFinite(n) && n >= 0 ? n : 0
-  }
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
