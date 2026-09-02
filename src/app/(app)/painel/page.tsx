@@ -108,11 +108,11 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       .eq('unidade_id', unidadeId)
       .gte('data', `${Y}-01-01`)
       .lte('data', `${Y}-12-31`),
+    // Anual: soma TODO o histórico importado do ano (lavagem + assinatura + outro).
     supabase
       .from('faturamento_historico')
       .select('valor')
       .eq('unidade_id', unidadeId)
-      .eq('categoria', 'assinatura')
       .gte('mes', `${Y}-01-01`)
       .lte('mes', `${Y}-12-01`),
     supabase
@@ -223,8 +223,8 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const anoAtual = Number(hoje.slice(0, 4))
   const ehAnoAtual = Y === anoAtual
   const fatCaixaAno = round2(((fechsAno ?? []) as FechRow[]).reduce((s, f) => s + fat(f), 0))
-  const fatAssinAno = round2(((fatHistAno ?? []) as { valor: number }[]).reduce((s, r) => s + Number(r.valor), 0))
-  const fatAnoReal = round2(fatCaixaAno + fatAssinAno)
+  const fatHistAnoTot = round2(((fatHistAno ?? []) as { valor: number }[]).reduce((s, r) => s + Number(r.valor), 0))
+  const fatAnoReal = round2(fatCaixaAno + fatHistAnoTot)
   // Meta anual = soma das metas de faturamento dos 12 meses (quantidade × preço do item).
   const precoTipo = new Map(tiposList.map((t) => [t.id, Number(t.preco)]))
   const metaFatAno = round2(
@@ -303,7 +303,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               <p className="text-xs text-slate-500">
                 {metaFatAno > 0 ? <>Meta {formatBRL(metaFatAno)} · </> : <>Sem meta cadastrada para {Y} · </>}
                 realizado {formatBRL(fatAnoReal)}
-                {fatAssinAno > 0 && <> (caixa {formatBRL(fatCaixaAno)} + assinaturas {formatBRL(fatAssinAno)})</>}
+                {fatHistAnoTot > 0 && <> (caixa {formatBRL(fatCaixaAno)} + histórico {formatBRL(fatHistAnoTot)})</>}
                 {ehAnoAtual && metaFatAno > 0 && <> · projeção {formatBRL(projFatAno)}</>}
               </p>
             </div>
