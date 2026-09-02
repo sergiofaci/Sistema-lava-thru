@@ -138,6 +138,14 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const mediaUtilizacao = assinantesMes > 0 ? round2(lavAssinCaixa / assinantesMes) : 0
   // Ticket médio por lavagem de assinante = receita das assinaturas ÷ utilizações no caixa.
   const ticketAssin = lavAssinCaixa > 0 ? round2(fatAssinMes / lavAssinCaixa) : 0
+  // Lavagens avulsas no caixa = tipos lavagem (não serviço) exceto assinatura.
+  const lavAvulsaCaixa = round2(
+    tiposList
+      .filter((t) => t.categoria !== 'servico' && !ehAssinatura(t.nome))
+      .reduce((s, t) => s + (rMes.get(t.id) ?? 0), 0),
+  )
+  // Ticket médio de lavagens avulsas = faturamento do caixa ÷ lavagens avulsas.
+  const ticketAvulsa = lavAvulsaCaixa > 0 ? round2(fatCaixaMes / lavAvulsaCaixa) : 0
 
   // Visibilidade
   const configurado = new Set((visItens ?? []).map((v) => v.tipo_lavagem_id))
@@ -288,23 +296,41 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               {assinantesMes === 0 && <> — importe o Histórico de Faturamento das assinaturas para calcular</>}
             </p>
           </Card>
-          <Card>
-            <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="font-semibold text-brand-dark">Ticket médio por lavagem de assinante</h2>
-                <p className="text-xs text-slate-500">Receita das assinaturas (R$) ÷ utilizações (caixa)</p>
+          {verFaturamento && (
+            <Card>
+              <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="font-semibold text-brand-dark">Ticket médio por lavagem de assinante</h2>
+                  <p className="text-xs text-slate-500">Receita das assinaturas (R$) ÷ utilizações (caixa)</p>
+                </div>
+                <span className="text-3xl font-bold text-brand-dark">
+                  {lavAssinCaixa > 0 ? formatBRL(ticketAssin) : '—'}
+                </span>
               </div>
-              <span className="text-3xl font-bold text-brand-dark">
-                {lavAssinCaixa > 0 ? formatBRL(ticketAssin) : '—'}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              <strong>{formatBRL(fatAssinMes)}</strong> ÷ <strong>{formatQtd(lavAssinCaixa)}</strong> lavagens
-              {lavAssinCaixa > 0 && <> = <strong>{formatBRL(ticketAssin)}</strong> por lavagem de assinante</>}
-              {lavAssinCaixa === 0 && <> — sem utilizações de assinantes lançadas no caixa</>}
-            </p>
-          </Card>
+              <p className="mt-2 text-xs text-slate-500">
+                <strong>{formatBRL(fatAssinMes)}</strong> ÷ <strong>{formatQtd(lavAssinCaixa)}</strong> lavagens
+                {lavAssinCaixa > 0 && <> = <strong>{formatBRL(ticketAssin)}</strong> por lavagem de assinante</>}
+                {lavAssinCaixa === 0 && <> — sem utilizações de assinantes lançadas no caixa</>}
+              </p>
+            </Card>
+          )}
         </div>
+      )}
+
+      {verFaturamento && lavAvulsaCaixa > 0 && (
+        <Card className="mb-6">
+          <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-brand-dark">Ticket médio de lavagens avulsas</h2>
+              <p className="text-xs text-slate-500">Faturamento do caixa (R$) ÷ lavagens avulsas (caixa)</p>
+            </div>
+            <span className="text-3xl font-bold text-brand-dark">{formatBRL(ticketAvulsa)}</span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            <strong>{formatBRL(fatCaixaMes)}</strong> ÷ <strong>{formatQtd(lavAvulsaCaixa)}</strong> lavagens avulsas ={' '}
+            <strong>{formatBRL(ticketAvulsa)}</strong> por lavagem
+          </p>
+        </Card>
       )}
 
       {itens.length === 0 ? (
