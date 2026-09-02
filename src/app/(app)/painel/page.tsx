@@ -85,7 +85,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     )
   }
 
-  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }, { data: orcData }, { data: contasData }, { data: fatHistData }] = await Promise.all([
+  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }, { data: orcData }, { data: contasData }, { data: fatHistData }, { data: fechsAno }, { data: fatHistAno }, { data: metasAno }] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, categoria, preco, ordem').eq('ativo', true).order('ordem'),
     supabase.from('metas_item').select('tipo_lavagem_id, quantidade').eq('unidade_id', unidadeId).eq('mes', mesInicio),
     supabase
@@ -101,6 +101,26 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     // Assinaturas: vêm do Histórico de Faturamento (importado 1×/mês), não passam
     // pelo caixa. valor → soma ao faturamento realizado; quantidade → nº de assinantes.
     supabase.from('faturamento_historico').select('valor, quantidade').eq('unidade_id', unidadeId).eq('mes', mesInicio).eq('categoria', 'assinatura'),
+    // Faturamento anual — realizado (caixa + assinaturas) e metas dos 12 meses do ano.
+    supabase
+      .from('fechamentos_caixa')
+      .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
+      .eq('unidade_id', unidadeId)
+      .gte('data', `${Y}-01-01`)
+      .lte('data', `${Y}-12-31`),
+    supabase
+      .from('faturamento_historico')
+      .select('valor')
+      .eq('unidade_id', unidadeId)
+      .eq('categoria', 'assinatura')
+      .gte('mes', `${Y}-01-01`)
+      .lte('mes', `${Y}-12-01`),
+    supabase
+      .from('metas_item')
+      .select('tipo_lavagem_id, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('mes', `${Y}-01-01`)
+      .lte('mes', `${Y}-12-01`),
   ])
 
   const tiposList = (tipos ?? []) as { id: string; nome: string; categoria: string; preco: number; ordem: number }[]
@@ -199,6 +219,26 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const projFat =
     ehMesAtual && diaAtual > 0 ? round2((fatCaixaMes / diaAtual) * diasNoMes + fatAssinMes) : fatMesReal
 
+  // Faturamento ANUAL (ano do mês selecionado): realizado = caixa + assinaturas do ano.
+  const anoAtual = Number(hoje.slice(0, 4))
+  const ehAnoAtual = Y === anoAtual
+  const fatCaixaAno = round2(((fechsAno ?? []) as FechRow[]).reduce((s, f) => s + fat(f), 0))
+  const fatAssinAno = round2(((fatHistAno ?? []) as { valor: number }[]).reduce((s, r) => s + Number(r.valor), 0))
+  const fatAnoReal = round2(fatCaixaAno + fatAssinAno)
+  // Meta anual = soma das metas de faturamento dos 12 meses (quantidade × preço do item).
+  const precoTipo = new Map(tiposList.map((t) => [t.id, Number(t.preco)]))
+  const metaFatAno = round2(
+    ((metasAno ?? []) as { tipo_lavagem_id: string; quantidade: number }[]).reduce(
+      (s, m) => s + Number(m.quantidade) * (precoTipo.get(m.tipo_lavagem_id) ?? 0),
+      0,
+    ),
+  )
+  // Fração do ano decorrida (para meta proporcional e projeção), só no ano corrente.
+  const fatorAno = ehAnoAtual ? (Number(hoje.slice(5, 7)) - 1 + fatorAcum) / 12 : 1
+  const metaFatAnoAcum = round2(metaFatAno * fatorAno)
+  const semFatAno = semaforo(fatAnoReal, metaFatAnoAcum)
+  const projFatAno = ehAnoAtual && fatorAno > 0 ? round2(fatAnoReal / fatorAno) : fatAnoReal
+
   const filtro = (
     <form method="get" className="flex flex-wrap items-center gap-2">
       {usuario.papel === 'admin' && (
@@ -252,6 +292,41 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               {semFat === 'ok' ? 'no ritmo' : semFat === 'atencao' ? 'atenção' : 'abaixo do ritmo'}
             </span>
           </p>
+        </Card>
+      )}
+
+      {verFaturamento && (fatAnoReal > 0 || metaFatAno > 0) && (
+        <Card className="mb-6">
+          <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-brand-dark">Faturamento anual — {Y}</h2>
+              <p className="text-xs text-slate-500">
+                {metaFatAno > 0 ? <>Meta {formatBRL(metaFatAno)} · </> : <>Sem meta cadastrada para {Y} · </>}
+                realizado {formatBRL(fatAnoReal)}
+                {fatAssinAno > 0 && <> (caixa {formatBRL(fatCaixaAno)} + assinaturas {formatBRL(fatAssinAno)})</>}
+                {ehAnoAtual && metaFatAno > 0 && <> · projeção {formatBRL(projFatAno)}</>}
+              </p>
+            </div>
+            <span className={`text-3xl font-bold ${metaFatAno > 0 ? TXT[semFatAno] : 'text-brand-dark'}`}>
+              {metaFatAno > 0 ? `${((fatAnoReal / metaFatAno) * 100).toFixed(0)}%` : formatBRL(fatAnoReal)}
+            </span>
+          </div>
+          {metaFatAno > 0 ? (
+            <>
+              <Barra pct={(fatAnoReal / metaFatAno) * 100} cor={COR[semFatAno]} />
+              <p className="mt-2 text-xs text-slate-500">
+                Meta proporcional até hoje: <strong>{formatBRL(metaFatAnoAcum)}</strong> ·{' '}
+                <span className={TXT[semFatAno]}>
+                  {semFatAno === 'ok' ? 'no ritmo' : semFatAno === 'atencao' ? 'atenção' : 'abaixo do ritmo'}
+                </span>
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-slate-500">
+              Faturamento acumulado do ano (caixa + assinaturas). Defina metas mensais em{' '}
+              <strong>Cadastros → Metas (por item)</strong> para acompanhar a meta anual.
+            </p>
+          )}
         </Card>
       )}
 
