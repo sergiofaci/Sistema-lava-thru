@@ -85,7 +85,7 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     )
   }
 
-  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }, { data: orcData }, { data: contasData }] = await Promise.all([
+  const [{ data: tipos }, { data: metas }, { data: fechs }, { data: visItens }, { data: flags }, { data: orcData }, { data: contasData }, { data: fatHistData }] = await Promise.all([
     supabase.from('tipos_lavagem').select('id, nome, categoria, preco, ordem').eq('ativo', true).order('ordem'),
     supabase.from('metas_item').select('tipo_lavagem_id, quantidade').eq('unidade_id', unidadeId).eq('mes', mesInicio),
     supabase
@@ -98,6 +98,9 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     supabase.from('painel_cargo_flags').select('ver_faturamento, ver_despesas').eq('cargo', cargo === 'todos' ? '__none__' : cargo).maybeSingle(),
     supabase.from('orcamento_despesa').select('valor').eq('unidade_id', unidadeId).eq('mes', mesInicio),
     supabase.from('contas_pagas').select('valor').eq('unidade_id', unidadeId).gte('data', mesInicio).lte('data', mesFim),
+    // Receita de assinaturas: vem do Histórico de Faturamento (importado 1×/mês),
+    // não passa pelo caixa. Somada ao realizado para o total real do mês.
+    supabase.from('faturamento_historico').select('valor').eq('unidade_id', unidadeId).eq('mes', mesInicio).eq('categoria', 'assinatura'),
   ])
 
   const tiposList = (tipos ?? []) as { id: string; nome: string; categoria: string; preco: number; ordem: number }[]
@@ -108,9 +111,9 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const rMes = new Map<string, number>()
   const rHoje = new Map<string, number>()
   const rTurno = new Map<string, number>()
-  let fatMesReal = 0
+  let fatCaixaMes = 0
   for (const f of (fechs ?? []) as FechRow[]) {
-    fatMesReal += fat(f)
+    fatCaixaMes += fat(f)
     for (const l of f.lavagens ?? []) {
       const id = l.tipo_lavagem_id
       rMes.set(id, (rMes.get(id) ?? 0) + Number(l.quantidade))
@@ -120,7 +123,10 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
       }
     }
   }
-  fatMesReal = round2(fatMesReal)
+  fatCaixaMes = round2(fatCaixaMes)
+  // Assinaturas (Histórico de Faturamento) somam ao realizado; não passam pelo caixa.
+  const fatAssinMes = round2(((fatHistData ?? []) as { valor: number }[]).reduce((s, r) => s + Number(r.valor), 0))
+  const fatMesReal = round2(fatCaixaMes + fatAssinMes)
 
   // Visibilidade
   const configurado = new Set((visItens ?? []).map((v) => v.tipo_lavagem_id))
@@ -166,7 +172,9 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   const metaFat = round2(tiposList.reduce((s, t) => s + (metaQtd.get(t.id) ?? 0) * Number(t.preco), 0))
   const metaFatAcum = round2(metaFat * fatorAcum)
   const semFat = semaforo(fatMesReal, metaFatAcum)
-  const projFat = ehMesAtual && diaAtual > 0 ? round2((fatMesReal / diaAtual) * diasNoMes) : fatMesReal
+  // Projeta a parte do caixa (acumula dia a dia) e soma a assinatura como valor cheio.
+  const projFat =
+    ehMesAtual && diaAtual > 0 ? round2((fatCaixaMes / diaAtual) * diasNoMes + fatAssinMes) : fatMesReal
 
   const filtro = (
     <form method="get" className="flex flex-wrap items-center gap-2">
@@ -204,6 +212,9 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
               <h2 className="font-semibold text-brand-dark">Faturamento</h2>
               <p className="text-xs text-slate-500">
                 Meta {formatBRL(metaFat)} · realizado {formatBRL(fatMesReal)}
+                {fatAssinMes > 0 && (
+                  <> (caixa {formatBRL(fatCaixaMes)} + assinaturas {formatBRL(fatAssinMes)})</>
+                )}
                 {ehMesAtual && <> · projeção {formatBRL(projFat)}</>}
               </p>
             </div>
