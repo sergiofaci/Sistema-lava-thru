@@ -98,9 +98,9 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     supabase.from('painel_cargo_flags').select('ver_faturamento, ver_despesas').eq('cargo', cargo === 'todos' ? '__none__' : cargo).maybeSingle(),
     supabase.from('orcamento_despesa').select('valor').eq('unidade_id', unidadeId).eq('mes', mesInicio),
     supabase.from('contas_pagas').select('valor').eq('unidade_id', unidadeId).gte('data', mesInicio).lte('data', mesFim),
-    // Receita de assinaturas: vem do Histórico de Faturamento (importado 1×/mês),
-    // não passa pelo caixa. Somada ao realizado para o total real do mês.
-    supabase.from('faturamento_historico').select('valor').eq('unidade_id', unidadeId).eq('mes', mesInicio).eq('categoria', 'assinatura'),
+    // Assinaturas: vêm do Histórico de Faturamento (importado 1×/mês), não passam
+    // pelo caixa. valor → soma ao faturamento realizado; quantidade → nº de assinantes.
+    supabase.from('faturamento_historico').select('valor, quantidade').eq('unidade_id', unidadeId).eq('mes', mesInicio).eq('categoria', 'assinatura'),
   ])
 
   const tiposList = (tipos ?? []) as { id: string; nome: string; categoria: string; preco: number; ordem: number }[]
@@ -125,8 +125,17 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
   }
   fatCaixaMes = round2(fatCaixaMes)
   // Assinaturas (Histórico de Faturamento) somam ao realizado; não passam pelo caixa.
-  const fatAssinMes = round2(((fatHistData ?? []) as { valor: number }[]).reduce((s, r) => s + Number(r.valor), 0))
+  const fatHist = (fatHistData ?? []) as { valor: number; quantidade: number }[]
+  const fatAssinMes = round2(fatHist.reduce((s, r) => s + Number(r.valor), 0))
   const fatMesReal = round2(fatCaixaMes + fatAssinMes)
+  // Nº de assinantes = quantidade importada no histórico (categoria assinatura).
+  const assinantesMes = round2(fatHist.reduce((s, r) => s + Number(r.quantidade), 0))
+  // Tipo "Assinatura Mensal" (lançado no fechamento): as lavagens feitas pelos assinantes.
+  const ehAssinatura = (nome: string) => nome.toLowerCase().includes('assinatura')
+  const tipoAssin = tiposList.find((t) => ehAssinatura(t.nome))
+  const lavAssinCaixa = tipoAssin ? round2(rMes.get(tipoAssin.id) ?? 0) : 0
+  // Média de utilização = lavagens de assinantes no caixa ÷ nº de assinantes.
+  const mediaUtilizacao = assinantesMes > 0 ? round2(lavAssinCaixa / assinantesMes) : 0
 
   // Visibilidade
   const configurado = new Set((visItens ?? []).map((v) => v.tipo_lavagem_id))
@@ -143,16 +152,20 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
     .filter((t) => (metaQtd.get(t.id) ?? 0) > 0)
     .filter((t) => cargo === 'todos' || configurado.size === 0 || configurado.has(t.id))
     .map((t) => {
+      const assin = ehAssinatura(t.nome)
       const metaMes = metaQtd.get(t.id) ?? 0
-      const feitoMes = round2(rMes.get(t.id) ?? 0)
+      // Assinatura: realizado = nº de assinantes importados (histórico), não o caixa.
+      const feitoMes = assin ? assinantesMes : round2(rMes.get(t.id) ?? 0)
       const metaDia = round2(metaMes / diasNoMes)
       const metaTurno = round2(metaDia / 2)
-      const metaAcum = round2(metaMes * fatorAcum)
+      // Assinantes são contagem mensal (não acumulam por dia): compara direto com a meta.
+      const metaAcum = assin ? metaMes : round2(metaMes * fatorAcum)
       const sem = semaforo(feitoMes, metaAcum)
       return {
         id: t.id,
         nome: t.nome,
         categoria: t.categoria,
+        assin,
         metaMes,
         feitoMes,
         pctMes: metaMes > 0 ? (feitoMes / metaMes) * 100 : 0,
@@ -255,6 +268,28 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
         </Card>
       )}
 
+      {(assinantesMes > 0 || lavAssinCaixa > 0) && (
+        <Card className="mb-6">
+          <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-brand-dark">Média de utilização de assinantes</h2>
+              <p className="text-xs text-slate-500">
+                Lavagens de assinantes (caixa) ÷ assinantes (histórico)
+              </p>
+            </div>
+            <span className="text-3xl font-bold text-brand-dark">
+              {assinantesMes > 0 ? `${formatQtd(mediaUtilizacao)}×` : '—'}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            <strong>{formatQtd(lavAssinCaixa)}</strong> lavagens de assinantes ÷{' '}
+            <strong>{formatQtd(assinantesMes)}</strong> assinantes
+            {assinantesMes > 0 && <> = <strong>{formatQtd(mediaUtilizacao)}</strong> lavagens por assinante no mês</>}
+            {assinantesMes === 0 && <> — importe o Histórico de Faturamento das assinaturas para calcular</>}
+          </p>
+        </Card>
+      )}
+
       {itens.length === 0 ? (
         <EmptyState>
           Sem metas para exibir neste filtro. Defina metas em <strong>Cadastros → Metas (por item)</strong>.
@@ -277,17 +312,23 @@ export default async function PainelPage({ searchParams }: { searchParams: Promi
                           <span className={`text-2xl font-bold ${TXT[i.sem]}`}>{i.pctMes.toFixed(0)}%</span>
                         </div>
                         <p className="mb-2 text-xs text-slate-500">
-                          Mês: <strong>{formatQtd(i.feitoMes)}</strong> / {formatQtd(i.metaMes)}
+                          {i.assin ? 'Assinantes' : 'Mês'}: <strong>{formatQtd(i.feitoMes)}</strong> / {formatQtd(i.metaMes)}
                         </p>
                         <Barra pct={i.pctMes} cor={COR[i.sem]} />
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                          <div className="rounded-lg bg-slate-50 px-3 py-2">
-                            Hoje: <strong className="text-slate-700">{formatQtd(i.feitoHoje)}</strong> / {formatQtd(i.metaDia)}
+                        {i.assin ? (
+                          <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                            Assinantes do mês (importados no Histórico de Faturamento).
+                          </p>
+                        ) : (
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              Hoje: <strong className="text-slate-700">{formatQtd(i.feitoHoje)}</strong> / {formatQtd(i.metaDia)}
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              Turno: <strong className="text-slate-700">{formatQtd(i.feitoTurno)}</strong> / {formatQtd(i.metaTurno)}
+                            </div>
                           </div>
-                          <div className="rounded-lg bg-slate-50 px-3 py-2">
-                            Turno: <strong className="text-slate-700">{formatQtd(i.feitoTurno)}</strong> / {formatQtd(i.metaTurno)}
-                          </div>
-                        </div>
+                        )}
                       </Card>
                     ))}
                   </div>
