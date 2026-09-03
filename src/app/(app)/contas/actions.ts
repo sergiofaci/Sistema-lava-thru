@@ -110,3 +110,27 @@ export async function criarFornecedorRapido(payload: {
   revalidatePath('/contas')
   return { ok: data as FornecedorRapido }
 }
+
+export type TipoDespesaRapido = { id: string; nome: string }
+
+const GRUPOS_DRE = ['deducao', 'cmv', 'operacional', 'financeira', 'imposto']
+
+// Cadastro rápido de tipo de despesa a partir do lançamento de contas a pagar.
+export async function criarTipoDespesaRapido(payload: {
+  nome: string
+  grupo_dre?: string
+}): Promise<{ ok?: TipoDespesaRapido; erro?: string }> {
+  await requireModulo('contas')
+  const nome = String(payload?.nome ?? '').trim()
+  if (!nome) return { erro: 'Informe o nome do tipo de despesa.' }
+  const grupo_dre = GRUPOS_DRE.includes(String(payload?.grupo_dre ?? '')) ? String(payload.grupo_dre) : 'operacional'
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('tipos_despesa')
+    .insert({ nome, grupo_dre })
+    .select('id, nome')
+    .single()
+  if (error) return { erro: 'Falha ao cadastrar tipo de despesa: ' + error.message }
+  revalidatePath('/contas')
+  return { ok: data as TipoDespesaRapido }
+}
