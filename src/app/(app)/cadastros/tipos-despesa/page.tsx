@@ -8,16 +8,24 @@ const ROTA = '/cadastros/tipos-despesa'
 const TABELA = 'tipos_despesa'
 const ROTULO = 'Tipo de despesa'
 
+const GRUPOS_DRE = ['deducao', 'cmv', 'operacional', 'financeira', 'imposto'] as const
+// Escopo de módulo: server actions inline não podem capturar função local.
+const normGrupo = (v: unknown) => {
+  const s = String(v ?? '')
+  return (GRUPOS_DRE as readonly string[]).includes(s) ? s : 'operacional'
+}
+
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
-  const { data } = await s.from(TABELA).select('id, nome, ativo').order('nome')
+  const { data } = await s.from(TABELA).select('id, nome, grupo_dre, ativo').order('nome')
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
-    const r = await crudInserir(TABELA, { nome }, ROTULO)
+    const grupo_dre = normGrupo(fd.get('grupo_dre'))
+    const r = await crudInserir(TABELA, { nome, grupo_dre }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -26,7 +34,8 @@ export default async function Page() {
     const id = String(fd.get('id'))
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
-    const r = await crudAtualizar(TABELA, id, { nome }, ROTULO)
+    const grupo_dre = normGrupo(fd.get('grupo_dre'))
+    const r = await crudAtualizar(TABELA, id, { nome, grupo_dre }, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -46,8 +55,25 @@ export default async function Page() {
   return (
     <CrudManager
       titulo="Tipos de Despesa"
-      descricao="Plano de contas. Ex.: Manutenção, Água, Energia, Salários."
-      fields={[{ name: 'nome', label: 'Nome', required: true, placeholder: 'Nome' }]}
+      descricao="Plano de contas. O grupo na DRE define em qual linha da demonstração cada tipo entra."
+      fields={[
+        { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Energia, ISS, Detergente' },
+        {
+          name: 'grupo_dre',
+          label: 'Grupo na DRE',
+          type: 'select',
+          required: true,
+          defaultValue: 'operacional',
+          hint: 'Onde entra na DRE',
+          options: [
+            { value: 'deducao', label: 'Dedução (ISS, PIS/COFINS)' },
+            { value: 'cmv', label: 'CMV / CSV (custo variável)' },
+            { value: 'operacional', label: 'Despesa operacional / fixa' },
+            { value: 'financeira', label: 'Despesa financeira (juros)' },
+            { value: 'imposto', label: 'Imposto sobre o resultado' },
+          ],
+        },
+      ]}
       itens={data ?? []}
       criar={criar}
       atualizar={atualizar}
