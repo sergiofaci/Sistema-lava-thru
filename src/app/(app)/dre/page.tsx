@@ -16,10 +16,19 @@ function rel(r: unknown, campo = 'nome'): string {
 
 const GRUPOS = ['deducao', 'cmv', 'operacional', 'financeira', 'imposto'] as const
 type Grupo = (typeof GRUPOS)[number]
+function obj(r: unknown): Record<string, unknown> {
+  return (Array.isArray(r) ? r[0] : r) as Record<string, unknown>
+}
 function grupoDe(r: unknown): Grupo {
-  const o = Array.isArray(r) ? r[0] : r
-  const g = (o as Record<string, string>)?.grupo_dre
+  const g = obj(r)?.grupo_dre as string
   return (GRUPOS as readonly string[]).includes(g) ? (g as Grupo) : 'operacional'
+}
+// Conta entra na DRE? (exibir_na_dre é boolean; ausente = true por padrão)
+function exibeDre(r: unknown): boolean {
+  return obj(r)?.exibir_na_dre !== false
+}
+function comportDe(r: unknown): string {
+  return String(obj(r)?.comportamento ?? 'fixo')
 }
 
 const FORMAS = [
@@ -77,7 +86,7 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
     unidadeFiltro ? (q as any).eq('unidade_id', unidadeFiltro) : q
 
   const selForma = FORMAS.map((f) => f.key).join(', ')
-  const selConta = 'valor, tipo:tipos_despesa(nome, grupo_dre)'
+  const selConta = 'valor, tipo:tipos_despesa(nome, grupo_dre, exibir_na_dre, comportamento)'
 
   const [
     { data: fechMes },
@@ -110,8 +119,8 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
   ]
   const receitaBruta = round2(caixaMes + assinMes)
 
-  // ---- Cascata da DRE ----
-  const contas = (contasMes ?? []) as Conta[]
+  // ---- Cascata da DRE (só contas que compõem a DRE) ----
+  const contas = ((contasMes ?? []) as Conta[]).filter((c) => exibeDre(c.tipo))
   const deducoes = linhaGrupo(contas, 'deducao')
   const cmv = linhaGrupo(contas, 'cmv')
   const operacional = linhaGrupo(contas, 'operacional')
@@ -126,6 +135,14 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
   const margemBruta = pct(lucroBruto, receitaLiquida)
   const margemEbitda = pct(ebitda, receitaLiquida)
   const margemLiquida = pct(lucroLiquido, receitaLiquida)
+
+  // ---- Custos e despesas: fixos × variáveis (exclui deduções) ----
+  const somaComport = (comp: string) =>
+    round2(contas.filter((c) => grupoDe(c.tipo) !== 'deducao' && comportDe(c.tipo) === comp).reduce((s, c) => s + Number(c.valor), 0))
+  const custoVariavel = somaComport('variavel')
+  const custoFixo = somaComport('fixo')
+  const margemContribuicao = round2(receitaLiquida - custoVariavel)
+  const margemContribPct = pct(margemContribuicao, receitaLiquida)
 
   // ---- Comparativo (mês anterior): receita e lucro líquido ----
   const receitaAnt = round2(somaFat((fechAnt ?? []) as unknown as FechRow[]) + somaAssin(assinAntData))
@@ -157,6 +174,10 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
     impostos,
     lucroLiquido,
     margemLiquida,
+    custoFixo,
+    custoVariavel,
+    margemContribuicao,
+    margemContribPct,
     comparativo: { receitaAnt, lucroLiquidoAnt },
   }
 
@@ -185,6 +206,11 @@ export default async function DREPage({ searchParams }: { searchParams: Promise<
     ...bloco('(-) Impostos sobre o resultado', impostos),
     ['(=) LUCRO LÍQUIDO', brl(lucroLiquido)],
     ['    Margem líquida %', p1(margemLiquida)],
+    [],
+    ['Custos/despesas variáveis', brl(custoVariavel)],
+    ['Custos/despesas fixos', brl(custoFixo)],
+    ['Margem de contribuição', brl(margemContribuicao)],
+    ['    Margem de contribuição %', p1(margemContribPct)],
   ])
 
   return (

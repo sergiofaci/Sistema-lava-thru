@@ -9,23 +9,31 @@ const TABELA = 'tipos_despesa'
 const ROTULO = 'Tipo de despesa'
 
 const GRUPOS_DRE = ['deducao', 'cmv', 'operacional', 'financeira', 'imposto'] as const
+const COMPORTAMENTOS = ['fixo', 'variavel', 'deducao', 'nao_aplicavel'] as const
 // Escopo de módulo: server actions inline não podem capturar função local.
 const normGrupo = (v: unknown) => {
   const s = String(v ?? '')
   return (GRUPOS_DRE as readonly string[]).includes(s) ? s : 'operacional'
 }
+const normComport = (v: unknown) => {
+  const s = String(v ?? '')
+  return (COMPORTAMENTOS as readonly string[]).includes(s) ? s : 'fixo'
+}
+const normExibir = (v: unknown) => String(v ?? '') !== 'nao'
 
 export default async function Page() {
   await requirePapel('admin')
   const s = await createClient()
-  const { data } = await s.from(TABELA).select('id, nome, grupo_dre, ativo').order('nome')
+  const { data } = await s.from(TABELA).select('id, nome, grupo_dre, comportamento, exibir_na_dre, ativo').order('nome')
+  // exibir_na_dre é boolean no banco; o form usa 'sim'/'nao' — normalizamos para exibir na listagem.
+  const itens = (data ?? []).map((t) => ({ ...t, exibir_na_dre: t.exibir_na_dre === false ? 'nao' : 'sim' }))
 
   async function criar(_p: { ok?: string; erro?: string }, fd: FormData) {
     'use server'
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
-    const grupo_dre = normGrupo(fd.get('grupo_dre'))
-    const r = await crudInserir(TABELA, { nome, grupo_dre }, ROTULO)
+    const payload = { nome, grupo_dre: normGrupo(fd.get('grupo_dre')), comportamento: normComport(fd.get('comportamento')), exibir_na_dre: normExibir(fd.get('exibir_na_dre')) }
+    const r = await crudInserir(TABELA, payload, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -34,8 +42,8 @@ export default async function Page() {
     const id = String(fd.get('id'))
     const nome = String(fd.get('nome') ?? '').trim()
     if (!nome) return { erro: 'Informe o nome.' }
-    const grupo_dre = normGrupo(fd.get('grupo_dre'))
-    const r = await crudAtualizar(TABELA, id, { nome, grupo_dre }, ROTULO)
+    const payload = { nome, grupo_dre: normGrupo(fd.get('grupo_dre')), comportamento: normComport(fd.get('comportamento')), exibir_na_dre: normExibir(fd.get('exibir_na_dre')) }
+    const r = await crudAtualizar(TABELA, id, payload, ROTULO)
     if (r.ok) revalidatePath(ROTA)
     return r
   }
@@ -73,8 +81,34 @@ export default async function Page() {
             { value: 'imposto', label: 'Imposto sobre o resultado' },
           ],
         },
+        {
+          name: 'comportamento',
+          label: 'Comportamento',
+          type: 'select',
+          required: true,
+          defaultValue: 'fixo',
+          hint: 'Fixo × variável',
+          options: [
+            { value: 'fixo', label: 'Fixo' },
+            { value: 'variavel', label: 'Variável' },
+            { value: 'deducao', label: 'Dedução' },
+            { value: 'nao_aplicavel', label: 'Não aplicável' },
+          ],
+        },
+        {
+          name: 'exibir_na_dre',
+          label: 'Entra na DRE?',
+          type: 'select',
+          required: true,
+          defaultValue: 'sim',
+          hint: 'Não = passivo/repasse, não é resultado',
+          options: [
+            { value: 'sim', label: 'Sim' },
+            { value: 'nao', label: 'Não' },
+          ],
+        },
       ]}
-      itens={data ?? []}
+      itens={itens}
       criar={criar}
       atualizar={atualizar}
       alternarAtivo={alternarAtivo}

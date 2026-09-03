@@ -175,6 +175,8 @@ function NovoTipoDespesaModal({ onClose, onCriado }: { onClose: () => void; onCr
   const [erro, setErro] = useState('')
   const [nome, setNome] = useState('')
   const [grupo, setGrupo] = useState('operacional')
+  const [comportamento, setComportamento] = useState('fixo')
+  const [entraDre, setEntraDre] = useState('sim')
 
   function salvar() {
     setErro('')
@@ -183,7 +185,12 @@ function NovoTipoDespesaModal({ onClose, onCriado }: { onClose: () => void; onCr
       return
     }
     startTransition(async () => {
-      const r = await criarTipoDespesaRapido({ nome, grupo_dre: grupo })
+      const r = await criarTipoDespesaRapido({
+        nome,
+        grupo_dre: grupo,
+        comportamento,
+        exibir_na_dre: entraDre !== 'nao',
+      })
       if (r.erro) setErro(r.erro)
       else if (r.ok) onCriado(r.ok)
     })
@@ -206,6 +213,22 @@ function NovoTipoDespesaModal({ onClose, onCriado }: { onClose: () => void; onCr
               ))}
             </select>
           </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Comportamento" htmlFor="t-comp" hint="Fixo × variável">
+              <select id="t-comp" value={comportamento} onChange={(e) => setComportamento(e.target.value)} className={inputClass}>
+                <option value="fixo">Fixo</option>
+                <option value="variavel">Variável</option>
+                <option value="deducao">Dedução</option>
+                <option value="nao_aplicavel">Não aplicável</option>
+              </select>
+            </Field>
+            <Field label="Entra na DRE?" htmlFor="t-dre" hint="Não = passivo/repasse">
+              <select id="t-dre" value={entraDre} onChange={(e) => setEntraDre(e.target.value)} className={inputClass}>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </Field>
+          </div>
         </div>
         {erro && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{erro}</p>}
         <div className="mt-6 flex justify-end gap-3">

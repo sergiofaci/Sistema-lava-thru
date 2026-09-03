@@ -19,6 +19,10 @@ export type DREData = {
   impostos: LinhaGrupo
   lucroLiquido: number
   margemLiquida: number | null
+  custoFixo: number
+  custoVariavel: number
+  margemContribuicao: number
+  margemContribPct: number | null
   comparativo?: { receitaAnt: number; lucroLiquidoAnt: number }
 }
 
@@ -159,6 +163,19 @@ export function DRETabela({ data }: { data: DREData }) {
             <p className="text-slate-500">Margem líquida</p>
             <p className="font-medium text-slate-700">{data.margemLiquida === null ? '—' : `${data.margemLiquida.toFixed(1)}%`}</p>
           </div>
+        </div>
+
+        {/* Custos e despesas: fixos × variáveis */}
+        <div className="mt-4 border-t border-slate-200 pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Custos e despesas</p>
+          <Linha label="Variáveis" valor={data.custoVariavel} nivel={1} sinal="−" />
+          <Linha label="Fixos" valor={data.custoFixo} nivel={1} sinal="−" />
+          <Subtotal
+            label="Margem de contribuição"
+            valor={data.margemContribuicao}
+            margem={data.margemContribPct}
+            margemLabel="MC"
+          />
         </div>
 
         {data.comparativo && (
