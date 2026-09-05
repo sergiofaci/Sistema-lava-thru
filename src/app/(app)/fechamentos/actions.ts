@@ -2,7 +2,8 @@
 
 import { z } from 'zod'
 import { redirect } from 'next/navigation'
-import { requireModulo } from '@/lib/auth'
+import { revalidatePath } from 'next/cache'
+import { requireModulo, requirePapel } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { round2 } from '@/lib/money'
 
@@ -18,6 +19,7 @@ const schema = z.object({
     rede: z.object({ pix: Valor, credito: Valor, debito: Valor }),
     sipag: z.object({ pix: Valor, credito: Valor, debito: Valor }),
   }),
+  contagem_dinheiro: Valor, // valor contado na gaveta
   sistema: z.object({
     dinheiro: Valor,
     pix: Valor,
@@ -84,14 +86,17 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
   const maqCredito = round2(data.maquina.rede.credito + data.maquina.sipag.credito)
   const maqDebito = round2(data.maquina.rede.debito + data.maquina.sipag.debito)
 
-  // Diferenças recalculadas no servidor (máquina - sistema).
+  // Diferenças recalculadas no servidor (apurado − sistema).
+  // Negativo = faltou (sistema maior); positivo = sobrou.
+  const diferenca_dinheiro = round2(data.contagem_dinheiro - data.sistema.dinheiro)
   const diferenca_pix = round2(maqPix - data.sistema.pix)
   const diferenca_credito = round2(maqCredito - data.sistema.credito)
   const diferenca_debito = round2(maqDebito - data.sistema.debito)
+  // Total = soma algébrica (líquida): sobras compensam faltas = diferença real.
   const diferenca_total = round2(
-    Math.abs(diferenca_pix) + Math.abs(diferenca_credito) + Math.abs(diferenca_debito),
+    diferenca_dinheiro + diferenca_pix + diferenca_credito + diferenca_debito,
   )
-  const temDiferenca = diferenca_total > 0.004
+  const temDiferenca = Math.abs(diferenca_total) > 0.004
 
   // Regra 4.2: se há diferença e o caixa ainda não confirmou, pede confirmação.
   if (temDiferenca && !data.confirmado_com_diferenca) {
@@ -116,6 +121,8 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
       maquina_sipag_credito: data.maquina.sipag.credito,
       maquina_sipag_debito: data.maquina.sipag.debito,
       sistema_dinheiro: data.sistema.dinheiro,
+      contagem_dinheiro: data.contagem_dinheiro,
+      diferenca_dinheiro,
       sistema_pix: data.sistema.pix,
       sistema_credito: data.sistema.credito,
       sistema_debito: data.sistema.debito,
@@ -160,4 +167,15 @@ export async function criarFechamento(input: FechamentoInput): Promise<Fechament
   }
 
   redirect(`/fechamentos/${fech.id}`)
+}
+
+// Estorna (exclui) um fechamento — libera o turno para relançar. Só admin.
+export async function estornarFechamento(formData: FormData): Promise<{ erro?: string }> {
+  await requirePapel('admin')
+  const id = String(formData.get('id'))
+  const supabase = await createClient()
+  const { error } = await supabase.from('fechamentos_caixa').delete().eq('id', id)
+  if (error) return { erro: 'Falha ao estornar: ' + error.message }
+  revalidatePath('/fechamentos')
+  redirect('/fechamentos')
 }

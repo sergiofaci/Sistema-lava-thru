@@ -8,10 +8,14 @@ export default async function NovaContaPage() {
   const usuario = await requireModulo('contas')
   const supabase = await createClient()
 
-  const [{ data: centros }, { data: tipos }] = await Promise.all([
+  const [{ data: centros }, { data: tipos }, { data: fornecedores }] = await Promise.all([
     supabase.from('centros_custo').select('id, nome').eq('ativo', true).order('nome'),
     supabase.from('tipos_despesa').select('id, nome').eq('ativo', true).order('nome'),
+    supabase.from('fornecedores').select('id, razao_social, categoria').eq('ativo', true).order('razao_social'),
   ])
+  const categorias = [
+    ...new Set((fornecedores ?? []).map((f) => (f.categoria ?? '').trim()).filter(Boolean)),
+  ]
 
   let unidades: { id: string; nome: string }[] | null = null
   if (usuario.papel === 'admin') {
@@ -32,7 +36,14 @@ export default async function NovaContaPage() {
           </Link>
         }
       />
-      <ContaForm unidades={unidades} centros={centros ?? []} tipos={tipos ?? []} hoje={hoje} />
+      <ContaForm
+        unidades={unidades}
+        centros={centros ?? []}
+        tipos={tipos ?? []}
+        fornecedores={(fornecedores ?? []).map((f) => ({ id: f.id, razao_social: f.razao_social }))}
+        categorias={categorias}
+        hoje={hoje}
+      />
     </div>
   )
 }

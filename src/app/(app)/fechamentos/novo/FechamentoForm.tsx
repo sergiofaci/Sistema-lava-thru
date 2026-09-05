@@ -5,7 +5,7 @@ import { parseBRL, formatBRL, round2 } from '@/lib/money'
 import { Card, Field, inputClass, btnPrimary, btnGhost } from '@/components/ui'
 import { criarFechamento, type FechamentoResult } from '../actions'
 
-type Tipo = { id: string; nome: string }
+type Tipo = { id: string; nome: string; categoria?: string }
 type Unidade = { id: string; nome: string }
 type Tres = { pix: string; credito: string; debito: string }
 
@@ -42,6 +42,7 @@ export function FechamentoForm({
   const [rede, setRede] = useState<Tres>({ pix: '', credito: '', debito: '' })
   const [sipag, setSipag] = useState<Tres>({ pix: '', credito: '', debito: '' })
   const [b, setB] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '', empresarial: '' })
+  const [contagem, setContagem] = useState('') // dinheiro contado na gaveta
   const [q, setQ] = useState({ dinheiro: '', pix: '', credito: '', debito: '', voucher: '', empresarial: '' })
   const [kits, setKits] = useState('')
   const [lav, setLav] = useState<Record<string, string>>({})
@@ -61,12 +62,14 @@ export function FechamentoForm({
   )
 
   const diffs = useMemo(() => {
+    const dinheiro = round2(parseBRL(contagem) - parseBRL(b.dinheiro))
     const pix = round2(maq.pix - parseBRL(b.pix))
     const credito = round2(maq.credito - parseBRL(b.credito))
     const debito = round2(maq.debito - parseBRL(b.debito))
-    const total = round2(Math.abs(pix) + Math.abs(credito) + Math.abs(debito))
-    return { pix, credito, debito, total }
-  }, [maq, b])
+    // Total = soma algébrica (líquida): sobras compensam faltas.
+    const total = round2(dinheiro + pix + credito + debito)
+    return { dinheiro, pix, credito, debito, total }
+  }, [maq, b, contagem])
 
   function montarPayload(confirmado: boolean) {
     return {
@@ -77,6 +80,7 @@ export function FechamentoForm({
         rede: { pix: parseBRL(rede.pix), credito: parseBRL(rede.credito), debito: parseBRL(rede.debito) },
         sipag: { pix: parseBRL(sipag.pix), credito: parseBRL(sipag.credito), debito: parseBRL(sipag.debito) },
       },
+      contagem_dinheiro: parseBRL(contagem),
       sistema: {
         dinheiro: parseBRL(b.dinheiro),
         pix: parseBRL(b.pix),
@@ -115,7 +119,7 @@ export function FechamentoForm({
   }
 
   function tentarFechar() {
-    if (diffs.total > 0.004) setModal({ diferenca: diffs.total })
+    if (Math.abs(diffs.total) > 0.004) setModal({ diferenca: diffs.total })
     else enviar(false)
   }
 
@@ -168,8 +172,10 @@ export function FechamentoForm({
         <div className="border-b border-slate-200 px-5 py-3">
           <h2 className="font-semibold text-brand-dark">Conferência por forma de pagamento</h2>
           <p className="text-xs text-slate-500">
-            Bloco A = maquininhas (Rede Card e Sipag) · Bloco B = sistema interno. A diferença compara
-            (Rede + Sipag) com o sistema.
+            Bloco A = maquininhas (Rede Card e Sipag); no Dinheiro, informe a{' '}
+            <strong>contagem</strong> da gaveta. Bloco B = sistema interno. Diferença ={' '}
+            apurado − sistema: <span className="text-danger">negativo (vermelho) = faltou</span> ·{' '}
+            <span className="text-success">positivo (verde) = sobrou</span>.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -185,7 +191,15 @@ export function FechamentoForm({
               </tr>
             </thead>
             <tbody>
-              <LinhaSemMaquina nome="Dinheiro" valor={b.dinheiro} onValor={(v) => setB({ ...b, dinheiro: v })} q={q.dinheiro} onQ={(v) => setQ({ ...q, dinheiro: v })} />
+              <LinhaDinheiro
+                contagem={contagem}
+                onContagem={setContagem}
+                bVal={b.dinheiro}
+                onB={(v) => setB({ ...b, dinheiro: v })}
+                q={q.dinheiro}
+                onQ={(v) => setQ({ ...q, dinheiro: v })}
+                diff={diffs.dinheiro}
+              />
               <LinhaComparada
                 nome="Pix"
                 rede={rede.pix}
@@ -233,10 +247,10 @@ export function FechamentoForm({
                 <td className="px-3 py-3 text-right text-brand-dark">{formatBRL(somaSistema)}</td>
                 <td />
                 <td className="px-5 py-3 text-right">
-                  {diffs.total > 0.004 ? (
-                    <span className="text-danger">{formatBRL(diffs.total)}</span>
-                  ) : (
+                  {Math.abs(diffs.total) <= 0.004 ? (
                     <span className="text-success">Sem diferença</span>
+                  ) : (
+                    <DiffValor diff={diffs.total} />
                   )}
                 </td>
               </tr>
@@ -250,24 +264,54 @@ export function FechamentoForm({
         <h2 className="mb-1 font-semibold text-brand-dark">Lavagens realizadas no período</h2>
         <p className="mb-4 text-xs text-slate-500">Quantidade por tipo de serviço.</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {tipos.map((t) => (
-            <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
-              <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
-                {t.nome}
-              </label>
-              <input
-                id={`lav-${t.id}`}
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={lav[t.id] ?? ''}
-                onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
-                placeholder="0"
-              />
-            </div>
-          ))}
+          {tipos
+            .filter((t) => t.categoria !== 'servico')
+            .map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
+                  {t.nome}
+                </label>
+                <input
+                  id={`lav-${t.id}`}
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={lav[t.id] ?? ''}
+                  onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
+                  className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                  placeholder="0"
+                />
+              </div>
+            ))}
         </div>
+
+        {tipos.some((t) => t.categoria === 'servico') && (
+          <div className="mt-5">
+            <h3 className="mb-1 text-sm font-semibold text-slate-600">Serviços adicionais</h3>
+            <p className="mb-3 text-xs text-slate-400">Não contam como lavagem nas estatísticas.</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {tipos
+                .filter((t) => t.categoria === 'servico')
+                .map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2">
+                    <label htmlFor={`lav-${t.id}`} className="text-sm text-slate-600">
+                      {t.nome}
+                    </label>
+                    <input
+                      id={`lav-${t.id}`}
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={lav[t.id] ?? ''}
+                      onChange={(e) => setLav({ ...lav, [t.id]: e.target.value })}
+                      className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
         <div className="mt-4 flex items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-light/40 px-3 py-2 sm:max-w-xs">
           <label htmlFor="kits" className="text-sm font-medium text-brand-dark">
             Kits vendidos
@@ -298,9 +342,12 @@ export function FechamentoForm({
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-brand-dark">Diferença identificada</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Foi identificada uma diferença de{' '}
-              <strong className="text-danger">{formatBRL(modal.diferenca)}</strong> entre a máquina e o
-              sistema. Deseja fechar o caixa mesmo assim, com a diferença registrada?
+              Diferença real (líquida) de{' '}
+              <strong className={modal.diferenca < 0 ? 'text-danger' : 'text-success'}>
+                {(modal.diferenca > 0 ? '+' : '') + formatBRL(modal.diferenca)}
+              </strong>{' '}
+              — {modal.diferenca < 0 ? 'faltou dinheiro' : 'sobrou dinheiro'}. Deseja fechar o caixa
+              mesmo assim, com a diferença registrada?
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" className={btnGhost} onClick={() => setModal(null)} disabled={pending}>
@@ -348,7 +395,6 @@ function LinhaComparada({
   onQ: (v: string) => void
   diff: number
 }) {
-  const temDiff = Math.abs(diff) > 0.004
   return (
     <tr className="border-b border-slate-100 last:border-0">
       <td className="px-5 py-2 font-medium text-slate-700">{nome}</td>
@@ -365,7 +411,55 @@ function LinhaComparada({
         <input className={qtd} inputMode="numeric" placeholder="0" value={q} onChange={(e) => onQ(e.target.value)} />
       </td>
       <td className="px-5 py-2 text-right font-medium">
-        {temDiff ? <span className="text-danger">{formatBRL(diff)}</span> : <span className="text-slate-300">—</span>}
+        <DiffValor diff={diff} />
+      </td>
+    </tr>
+  )
+}
+
+// Mostra a diferença colorida: negativo (faltou) em vermelho, positivo (sobrou) em verde.
+function DiffValor({ diff }: { diff: number }) {
+  if (Math.abs(diff) <= 0.004) return <span className="text-slate-300">—</span>
+  return (
+    <span className={diff < 0 ? 'text-danger' : 'text-success'}>
+      {(diff > 0 ? '+' : '') + formatBRL(diff)}
+    </span>
+  )
+}
+
+// Linha do Dinheiro: contagem da gaveta × sistema.
+function LinhaDinheiro({
+  contagem,
+  onContagem,
+  bVal,
+  onB,
+  q,
+  onQ,
+  diff,
+}: {
+  contagem: string
+  onContagem: (v: string) => void
+  bVal: string
+  onB: (v: string) => void
+  q: string
+  onQ: (v: string) => void
+  diff: number
+}) {
+  return (
+    <tr className="border-b border-slate-100 last:border-0">
+      <td className="px-5 py-2 font-medium text-slate-700">Dinheiro</td>
+      <td className="px-3 py-2">
+        <input className={money} inputMode="decimal" placeholder="Contagem" value={contagem} onChange={(e) => onContagem(e.target.value)} />
+      </td>
+      <td className="px-3 py-2 text-right text-slate-300">—</td>
+      <td className="px-3 py-2">
+        <input className={money} inputMode="decimal" placeholder="0,00" value={bVal} onChange={(e) => onB(e.target.value)} />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <input className={qtd} inputMode="numeric" placeholder="0" value={q} onChange={(e) => onQ(e.target.value)} />
+      </td>
+      <td className="px-5 py-2 text-right font-medium">
+        <DiffValor diff={diff} />
       </td>
     </tr>
   )

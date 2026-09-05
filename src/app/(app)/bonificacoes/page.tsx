@@ -3,20 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, inputClass, btnPrimary, EmptyState } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
 import { TURNO_LABEL } from '@/lib/types'
+import { toCSV } from '@/lib/csv'
+import { ExportBar } from '@/components/ExportBar'
 
 type SP = { unidade?: string; mes?: string }
 
-// ---- Regras (conforme definido com o cliente) -------------------------
-const TUNEL = ['Essencial', 'Premium', 'Exclusiva sem Box', 'Exclusiva com Box', 'Assinatura Mensal']
-const ASSINATURA = 'Assinatura Mensal'
-const LIMPEZA_AVULSA = 'Limpeza Interna Avulsa'
-const CAIXA_RATE: Record<string, number> = {
-  Premium: 0.1,
-  'Exclusiva sem Box': 0.2,
-  'Exclusiva com Box': 0.3,
-}
-const RATE_MAQUINA = 0.35
-const RATE_LIMPEZA = 5.0
+// Bônus por lavagem/serviço vêm da tabela bonificacao_regras (configurável).
+// As regras globais abaixo seguem fixas (ticket médio, kits, gerente).
+const ASSINATURA = 'Assinatura Mensal' // excluída do ticket médio
 const RATE_KIT = 2.5
 const KIT_MIN = 60
 
@@ -113,11 +107,11 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
     )
   }
 
-  const [{ data: fechData }, { data: colabData }] = await Promise.all([
+  const [{ data: fechData }, { data: colabData }, { data: regrasData }] = await Promise.all([
     supabase
       .from('fechamentos_caixa')
       .select(
-        'turno, usuario_id, kits_vendidos, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, usuario:usuarios(nome), lavagens:fechamento_lavagens(quantidade, tipo:tipos_lavagem(nome))',
+        'turno, usuario_id, kits_vendidos, sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial, usuario:usuarios(nome), lavagens:fechamento_lavagens(quantidade, tipo:tipos_lavagem(id, nome, categoria))',
       )
       .eq('unidade_id', unidadeId)
       .gte('data', mesInicio)
@@ -127,6 +121,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
       .select('nome, cargo, turno, data_admissao')
       .eq('unidade_id', unidadeId)
       .eq('ativo', true),
+    supabase.from('bonificacao_regras').select('tipo_lavagem_id, cargo, valor, rateio').eq('ativo', true),
   ])
 
   const fechs = (fechData ?? []) as Fech[]
@@ -136,51 +131,65 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
     turno: string
     data_admissao: string | null
   }[]
+  const regras = (regrasData ?? []) as {
+    tipo_lavagem_id: string
+    cargo: string
+    valor: number
+    rateio: string
+  }[]
 
-  // Agregações da unidade
+  // Agregações da unidade — por tipo de lavagem (id)
   let fatTotal = 0
-  const washTotal: Record<string, number> = {}
-  const limpezaPorTurno: Record<string, number> = { manha: 0, tarde: 0 }
-  // Por caixa (usuario_id)
+  const tipoInfo = new Map<string, { nome: string; categoria: string }>()
+  const washByTipo = new Map<string, number>()
+  const washByTipoTurno = new Map<string, number>() // chave `${tipoId}:${turno}`
   const porCaixa = new Map<
     string,
-    { nome: string; fat: number; kits: number; wash: Record<string, number> }
+    { nome: string; fat: number; kits: number; wash: Map<string, number> }
   >()
 
   for (const f of fechs) {
     const fat = faturamento(f)
     fatTotal += fat
-    const c = porCaixa.get(f.usuario_id) ?? {
-      nome: rel(f.usuario),
-      fat: 0,
-      kits: 0,
-      wash: {},
-    }
+    const c = porCaixa.get(f.usuario_id) ?? { nome: rel(f.usuario), fat: 0, kits: 0, wash: new Map() }
     c.fat += fat
     c.kits += f.kits_vendidos ?? 0
     for (const l of f.lavagens ?? []) {
-      const nome = rel(l.tipo)
-      washTotal[nome] = (washTotal[nome] ?? 0) + l.quantidade
-      c.wash[nome] = (c.wash[nome] ?? 0) + l.quantidade
-      if (nome === LIMPEZA_AVULSA && (f.turno === 'manha' || f.turno === 'tarde'))
-        limpezaPorTurno[f.turno] += l.quantidade
+      const id = rel(l.tipo, 'id')
+      if (id === '—') continue
+      tipoInfo.set(id, { nome: rel(l.tipo), categoria: rel(l.tipo, 'categoria') })
+      washByTipo.set(id, (washByTipo.get(id) ?? 0) + l.quantidade)
+      c.wash.set(id, (c.wash.get(id) ?? 0) + l.quantidade)
+      if (f.turno === 'manha' || f.turno === 'tarde') {
+        const k = `${id}:${f.turno}`
+        washByTipoTurno.set(k, (washByTipoTurno.get(k) ?? 0) + l.quantidade)
+      }
     }
     porCaixa.set(f.usuario_id, c)
   }
 
-  const somaWash = (w: Record<string, number>, nomes: string[]) =>
-    nomes.reduce((s, n) => s + (w[n] ?? 0), 0)
-  const totalLavagens = Object.values(washTotal).reduce((s, n) => s + n, 0)
-  const tunelTotal = somaWash(washTotal, TUNEL)
-  const limpezaTotal = washTotal[LIMPEZA_AVULSA] ?? 0
+  const ehServico = (id: string) => tipoInfo.get(id)?.categoria === 'servico'
+  const ehAssinatura = (id: string) => tipoInfo.get(id)?.nome === ASSINATURA
+  let totalLavagens = 0
+  let servicosTotal = 0
+  for (const [id, q] of washByTipo) ehServico(id) ? (servicosTotal += q) : (totalLavagens += q)
+
+  const regrasCaixa = regras.filter((r) => r.cargo === 'caixa')
+  const regrasMaquina = regras.filter((r) => r.cargo === 'aux_maquina')
+  const regrasLimpeza = regras.filter((r) => r.cargo === 'aux_limpeza')
+
+  // "Veículos túnel" = soma das quantidades dos tipos com regra de máquina
+  const tiposMaquina = new Set(regrasMaquina.map((r) => r.tipo_lavagem_id))
+  const tunelTotal = [...tiposMaquina].reduce((s, id) => s + (washByTipo.get(id) ?? 0), 0)
   const kitsTotal = fechs.reduce((s, f) => s + (f.kits_vendidos ?? 0), 0)
 
-  // ---- Caixa (por colaborador que fechou) -----------------------------
+  // ---- Caixa (bônus individual por lavagem, de quem fechou) -----------
   const caixas = [...porCaixa.values()].map((c) => {
     const bonusLavagens = round2(
-      Object.entries(CAIXA_RATE).reduce((s, [nome, rate]) => s + (c.wash[nome] ?? 0) * rate, 0),
+      regrasCaixa.reduce((s, r) => s + (c.wash.get(r.tipo_lavagem_id) ?? 0) * Number(r.valor), 0),
     )
-    const lavagensTicket = Object.values(c.wash).reduce((s, n) => s + n, 0) - (c.wash[ASSINATURA] ?? 0)
+    let lavagensTicket = 0
+    for (const [id, q] of c.wash) if (!ehServico(id) && !ehAssinatura(id)) lavagensTicket += q
     const ticket = lavagensTicket > 0 ? round2(c.fat / lavagensTicket) : 0
     const bonusTicket = ticketBonus(ticket)
     const bonusKits = c.kits > KIT_MIN ? round2((c.kits - KIT_MIN) * RATE_KIT) : 0
@@ -191,16 +200,21 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
 
   // ---- Aux. Máquina (pool da unidade) ---------------------------------
   const auxMaquina = colabs.filter((c) => c.cargo === 'aux_maquina')
-  const poolMaquina = round2(tunelTotal * RATE_MAQUINA)
+  const poolMaquina = round2(
+    regrasMaquina.reduce((s, r) => s + (washByTipo.get(r.tipo_lavagem_id) ?? 0) * Number(r.valor), 0),
+  )
   const porPessoaMaquina = auxMaquina.length > 0 ? round2(poolMaquina / auxMaquina.length) : 0
 
   // ---- Aux. Limpeza (pool por turno) ----------------------------------
   const auxLimpeza = colabs.filter((c) => c.cargo === 'aux_limpeza')
   const limpezaTurnos = (['manha', 'tarde'] as const).map((t) => {
-    const pool = round2(limpezaPorTurno[t] * RATE_LIMPEZA)
+    const qtd = regrasLimpeza.reduce((s, r) => s + (washByTipoTurno.get(`${r.tipo_lavagem_id}:${t}`) ?? 0), 0)
+    const pool = round2(
+      regrasLimpeza.reduce((s, r) => s + (washByTipoTurno.get(`${r.tipo_lavagem_id}:${t}`) ?? 0) * Number(r.valor), 0),
+    )
     const pessoas = auxLimpeza.filter((c) => c.turno === t || c.turno === 'ambos')
     const porPessoa = pessoas.length > 0 ? round2(pool / pessoas.length) : 0
-    return { turno: t, qtd: limpezaPorTurno[t], pool, pessoas, porPessoa }
+    return { turno: t, qtd, pool, pessoas, porPessoa }
   })
   const totalLimpeza = round2(limpezaTurnos.reduce((s, x) => s + x.pool, 0))
   const totalMaquina = poolMaquina
@@ -223,12 +237,38 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
 
   const totalGeral = round2(totalCaixa + totalMaquina + totalLimpeza + totalGerente)
 
+  const brl = (n: number) => n.toFixed(2).replace('.', ',')
+  const csv = toCSV([
+    ['Bonificações — Lava Thru', mesLabel],
+    [],
+    ['CAIXA'],
+    ['Colaborador', 'Bônus lavagens', 'Ticket médio', 'Bônus ticket', 'Kits', 'Bônus kits', 'Total'],
+    ...caixas.map((c) => [c.nome, brl(c.bonusLavagens), brl(c.ticket), brl(c.bonusTicket), c.kits, brl(c.bonusKits), brl(c.total)]),
+    ['Subtotal Caixa', '', '', '', '', '', brl(totalCaixa)],
+    [],
+    ['AUX. MÁQUINA', `${tunelTotal} veículos`, 'Pool', brl(poolMaquina), `${auxMaquina.length} pessoa(s)`, 'Por pessoa', brl(porPessoaMaquina)],
+    [],
+    ['AUX. LIMPEZA'],
+    ...limpezaTurnos.map((t) => [TURNO_LABEL[t.turno], `${t.qtd} limpezas`, 'Pool', brl(t.pool), `${t.pessoas.length} pessoa(s)`, 'Por pessoa', brl(t.porPessoa)]),
+    [],
+    ['GERENTE'],
+    ['Nome', 'Tempo (meses)', '%', 'Bônus'],
+    ...gerentes.map((g) => [g.nome, g.meses, g.pct.toFixed(1), brl(g.bonus)]),
+    [],
+    ['TOTAL GERAL', brl(totalGeral)],
+  ])
+
   return (
     <div>
       <PageHeader
         titulo="Bonificações"
         descricao={`${mesLabel} — cálculo mensal por cargo`}
-        acao={filtro}
+        acao={
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportBar csv={csv} filename={`bonificacoes-${mes}`} />
+            {filtro}
+          </div>
+        }
       />
 
       {/* Resumo */}
@@ -237,6 +277,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
         <Mini label="Lavagens" valor={String(totalLavagens)} />
         <Mini label="Veículos túnel" valor={String(tunelTotal)} />
         <Mini label="Kits vendidos" valor={String(kitsTotal)} />
+        {servicosTotal > 0 && <Mini label="Serviços adicionais" valor={String(servicosTotal)} />}
       </div>
 
       <div className="mb-6 rounded-xl bg-brand-dark px-5 py-4 text-white">
@@ -276,7 +317,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
       {/* Aux. Máquina */}
       <Secao
         titulo="Aux. de Lavagem (Máquina)"
-        subtitulo={`R$ ${RATE_MAQUINA.toFixed(2)} por veículo no túnel, dividido igualmente.`}
+        subtitulo="Soma dos bônus por veículo no túnel (conforme regras), dividida igualmente."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Mini label="Veículos túnel" valor={String(tunelTotal)} />
@@ -297,7 +338,7 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
       {/* Aux. Limpeza */}
       <Secao
         titulo="Aux. de Limpeza Interna"
-        subtitulo={`R$ ${RATE_LIMPEZA.toFixed(2)} por Limpeza Interna Avulsa, dividido por turno.`}
+        subtitulo="Soma dos bônus dos serviços de limpeza (conforme regras), dividida por turno."
       >
         <div className="space-y-3">
           {limpezaTurnos.map((t) => (
@@ -346,14 +387,14 @@ export default async function BonificacoesPage({ searchParams }: { searchParams:
 
       <Card className="mt-6 bg-slate-50">
         <p className="text-xs text-slate-500">
-          <strong>Como é calculado:</strong> Caixa — Premium R$0,10 / Exclusiva sem Box R$0,20 /
-          Exclusiva com Box R$0,30 por lavagem; ticket médio = faturamento ÷ (lavagens exceto
-          Assinatura Mensal), maior faixa (&gt;57→100, &gt;58→150, &gt;59→200, &gt;60→250); kits =
-          (kits−60)×R$2,50 acima de 60. Aux. Máquina — veículos no túnel (Essencial, Premium,
-          Exclusivas e Assinatura) × R$0,35 ÷ nº de colaboradores. Aux. Limpeza — Limpeza Interna
-          Avulsa × R$5,00 ÷ colaboradores do turno. Gerente — faturamento total × % por tempo de
-          empresa. (O gerente usa o faturamento total por ora; ao criarmos o módulo de assinaturas,
-          descontamos a parcela de assinatura.)
+          <strong>Como é calculado:</strong> Os bônus por lavagem/serviço vêm das regras em{' '}
+          <em>Cadastros → Bonificações</em> (cargo, valor por unidade e rateio). Caixa — soma do
+          bônus individual das lavagens que registrou + ticket médio + kits. Ticket médio =
+          faturamento ÷ (lavagens, exceto Assinatura Mensal e serviços adicionais); faixas
+          &gt;57→100, &gt;58→150, &gt;59→200, &gt;60→250. Kits = (kits−60)×R$2,50 acima de 60. Aux.
+          Máquina — soma dos bônus dos tipos de túnel ÷ nº de colaboradores. Aux. Limpeza — soma dos
+          bônus dos serviços de limpeza, por turno ÷ colaboradores do turno. Gerente — faturamento
+          total × % por tempo de empresa.
         </p>
       </Card>
     </div>

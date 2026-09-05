@@ -4,6 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, btnPrimary, btnGhost, inputClass } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
 import { ORIGENS_PAGAMENTO } from '@/lib/types'
+import { toCSV } from '@/lib/csv'
+import { ExportBar } from '@/components/ExportBar'
+import { AcoesConta } from './AcoesConta'
+
+const brl = (n: number) => n.toFixed(2).replace('.', ',')
 
 type SP = {
   unidade?: string
@@ -20,9 +25,14 @@ type Row = {
   numero_nota: string | null
   valor: number
   origem_pagamento: string
+  unidade_id: string
+  centro_custo_id: string
+  tipo_despesa_id: string
+  fornecedor_id: string | null
   unidade: { nome: string } | { nome: string }[] | null
   centro: { nome: string } | { nome: string }[] | null
   tipo: { nome: string } | { nome: string }[] | null
+  fornecedor: { razao_social: string } | { razao_social: string }[] | null
 }
 
 function rel(r: unknown): string {
@@ -41,19 +51,21 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams
   const supabase = await createClient()
 
-  const [{ data: centros }, { data: tipos }, unidadesRes] = await Promise.all([
+  const [{ data: centros }, { data: tipos }, { data: fornecedores }, unidadesRes] = await Promise.all([
     supabase.from('centros_custo').select('id, nome').eq('ativo', true).order('nome'),
     supabase.from('tipos_despesa').select('id, nome').eq('ativo', true).order('nome'),
+    supabase.from('fornecedores').select('id, razao_social, categoria').eq('ativo', true).order('razao_social'),
     usuario.papel === 'admin'
       ? supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       : Promise.resolve({ data: null }),
   ])
   const unidades = unidadesRes.data
+  const fornecedoresOpts = (fornecedores ?? []).map((f) => ({ id: f.id, razao_social: f.razao_social }))
 
   let q = supabase
     .from('contas_pagas')
     .select(
-      'id, data, numero_nota, valor, origem_pagamento, unidade:unidades(nome), centro:centros_custo(nome), tipo:tipos_despesa(nome)',
+      'id, data, numero_nota, valor, origem_pagamento, unidade_id, centro_custo_id, tipo_despesa_id, fornecedor_id, unidade:unidades(nome), centro:centros_custo(nome), tipo:tipos_despesa(nome), fornecedor:fornecedores(razao_social)',
     )
     .order('data', { ascending: false })
     .limit(300)
@@ -69,15 +81,39 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
   const contas = (data ?? []) as Row[]
   const total = round2(contas.reduce((s, c) => s + c.valor, 0))
 
+  const relF = (r: unknown): string => {
+    if (!r) return ''
+    if (Array.isArray(r)) return (r[0] as { razao_social?: string })?.razao_social ?? ''
+    return (r as { razao_social?: string }).razao_social ?? ''
+  }
+
+  const csv = toCSV([
+    ['Data', 'Unidade', 'Fornecedor', 'Centro de custo', 'Tipo de despesa', 'Nota', 'Origem', 'Valor'],
+    ...contas.map((c) => [
+      dataBR(c.data),
+      rel(c.unidade),
+      relF(c.fornecedor),
+      rel(c.centro),
+      rel(c.tipo),
+      c.numero_nota ?? '',
+      c.origem_pagamento,
+      brl(c.valor),
+    ]),
+    ['', '', '', '', '', '', 'TOTAL', brl(total)],
+  ])
+
   return (
     <div>
       <PageHeader
         titulo="Contas a Pagar"
         descricao="Despesas pagas por unidade."
         acao={
-          <Link href="/contas/nova" className={btnPrimary}>
-            + Novo pagamento
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportBar csv={csv} filename="contas-a-pagar" />
+            <Link href="/contas/nova" className={btnPrimary}>
+              + Novo pagamento
+            </Link>
+          </div>
         }
       />
 
@@ -150,11 +186,13 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                 <tr className="border-b border-slate-200 text-left text-slate-500">
                   <th className="px-5 py-3 font-medium">Data</th>
                   <th className="px-5 py-3 font-medium">Unidade</th>
+                  <th className="px-5 py-3 font-medium">Fornecedor</th>
                   <th className="px-5 py-3 font-medium">Centro</th>
                   <th className="px-5 py-3 font-medium">Tipo</th>
                   <th className="px-5 py-3 font-medium">Nota</th>
                   <th className="px-5 py-3 font-medium">Origem</th>
                   <th className="px-5 py-3 text-right font-medium">Valor</th>
+                  <th className="no-print px-5 py-3 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,12 +200,32 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                   <tr key={c.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-3 text-slate-700">{dataBR(c.data)}</td>
                     <td className="px-5 py-3 text-slate-600">{rel(c.unidade)}</td>
+                    <td className="px-5 py-3 text-slate-600">{relF(c.fornecedor) || '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{rel(c.centro)}</td>
                     <td className="px-5 py-3 text-slate-600">{rel(c.tipo)}</td>
                     <td className="px-5 py-3 text-slate-500">{c.numero_nota ?? '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{c.origem_pagamento}</td>
                     <td className="px-5 py-3 text-right font-medium text-slate-700">
                       {formatBRL(c.valor)}
+                    </td>
+                    <td className="no-print px-5 py-3">
+                      <AcoesConta
+                        conta={{
+                          id: c.id,
+                          unidade_id: c.unidade_id,
+                          centro_custo_id: c.centro_custo_id,
+                          tipo_despesa_id: c.tipo_despesa_id,
+                          fornecedor_id: c.fornecedor_id,
+                          data: c.data,
+                          numero_nota: c.numero_nota,
+                          valor: c.valor,
+                        }}
+                        centros={centros ?? []}
+                        tipos={tipos ?? []}
+                        unidades={unidades ?? null}
+                        fornecedores={fornecedoresOpts}
+                        origem={c.origem_pagamento}
+                      />
                     </td>
                   </tr>
                 ))}
