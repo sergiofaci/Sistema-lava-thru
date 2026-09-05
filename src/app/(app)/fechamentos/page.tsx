@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PageHeader, Card, EmptyState, Badge, btnPrimary, inputClass } from '@/components/ui'
 import { formatBRL, round2 } from '@/lib/money'
 import { TURNO_LABEL, type Turno } from '@/lib/types'
+import { DiasColapsaveis, type DiaView } from './DiasColapsaveis'
 
 type SP = { unidade?: string; mes?: string }
 
@@ -126,14 +127,30 @@ export default async function FechamentosPage({ searchParams }: { searchParams: 
   const totalMes = round2(fechamentos.reduce((s, f) => s + totalSistema(f), 0))
   const comDif = fechamentos.filter((f) => f.fechado_com_diferenca).length
 
-  // Agrupa por dia (mantém ordem desc que veio do banco)
+  // Agrupa por dia (mantém ordem desc que veio do banco) e monta a visão do client.
   const porDia = new Map<string, Row[]>()
   for (const f of fechamentos) {
     const arr = porDia.get(f.data) ?? []
     arr.push(f)
     porDia.set(f.data, arr)
   }
-  const dias = [...porDia.keys()]
+  const diasView: DiaView[] = [...porDia.entries()].map(([dia, linhas]) => ({
+    dia,
+    label: labelDia(dia),
+    total: round2(linhas.reduce((s, f) => s + totalSistema(f), 0)),
+    comDiferenca: linhas.some((f) => f.fechado_com_diferenca),
+    linhas: linhas.map((f) => ({
+      id: f.id,
+      manha: f.turno === 'manha',
+      turnoLabel: TURNO_LABEL[f.turno] ?? f.turno,
+      unidade: nome(f.unidade),
+      usuario: nome(f.usuario),
+      maquina: f.maquina_cartao ?? 'Rede/Sipag',
+      total: totalSistema(f),
+      comDif: f.fechado_com_diferenca,
+      diferenca: f.diferenca_total,
+    })),
+  }))
 
   return (
     <div>
@@ -188,59 +205,8 @@ export default async function FechamentosPage({ searchParams }: { searchParams: 
             </Card>
           </div>
 
-          <div className="space-y-5">
-            {dias.map((dia) => {
-              const linhas = porDia.get(dia)!
-              const totalDia = round2(linhas.reduce((s, f) => s + totalSistema(f), 0))
-              const difDia = linhas.some((f) => f.fechado_com_diferenca)
-              return (
-                <div key={dia}>
-                  <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-1">
-                    <h2 className="text-sm font-semibold capitalize text-brand-dark">{labelDia(dia)}</h2>
-                    <span className="flex items-center gap-2 text-sm">
-                      <span className="font-semibold text-slate-700">{formatBRL(totalDia)}</span>
-                      {difDia ? <Badge tone="danger">c/ diferença</Badge> : <Badge tone="success">OK</Badge>}
-                    </span>
-                  </div>
-                  <Card className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[680px] text-sm">
-                        <tbody>
-                          {linhas.map((f) => (
-                            <tr key={f.id} className="border-b border-slate-100 last:border-0">
-                              <td className="px-5 py-3">
-                                <Badge tone={f.turno === 'manha' ? 'warning' : 'neutral'}>
-                                  {TURNO_LABEL[f.turno] ?? f.turno}
-                                </Badge>
-                              </td>
-                              <td className="px-5 py-3 text-slate-600">{nome(f.unidade)}</td>
-                              <td className="px-5 py-3 text-slate-600">{nome(f.usuario)}</td>
-                              <td className="px-5 py-3 text-slate-600">{f.maquina_cartao ?? 'Rede/Sipag'}</td>
-                              <td className="px-5 py-3 text-right font-medium text-slate-700">
-                                {formatBRL(totalSistema(f))}
-                              </td>
-                              <td className="px-5 py-3">
-                                {f.fechado_com_diferenca ? (
-                                  <Badge tone="danger">{formatBRL(f.diferenca_total)}</Badge>
-                                ) : (
-                                  <Badge tone="success">OK</Badge>
-                                )}
-                              </td>
-                              <td className="px-5 py-3 text-right">
-                                <Link href={`/fechamentos/${f.id}`} className="text-sm text-brand hover:underline">
-                                  Ver
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
-                </div>
-              )
-            })}
-          </div>
+          <DiasColapsaveis dias={diasView} diaAberto={hoje} />
+          <p className="mt-3 text-xs text-slate-400">Clique em um dia para expandir os fechamentos.</p>
         </>
       )}
     </div>
