@@ -434,15 +434,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               {variacao === null ? (
                 <span>sem base do mês anterior</span>
               ) : (
-                <span className={variacao >= 0 ? 'text-success' : 'text-danger'}>
-                  {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}%{' '}
-                  {ehMesAtual ? `vs. mesmo período (até dia ${diaAtual})` : 'vs. mês anterior'}
-                </span>
+                <>
+                  <span className={variacao >= 0 ? 'text-success' : 'text-danger'}>
+                    {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}%{' '}
+                    {ehMesAtual ? `vs. mesmo período (até dia ${diaAtual})` : 'vs. mês anterior'}
+                  </span>
+                  <span className="block text-slate-400">
+                    {formatBRL(fatMes)} vs {formatBRL(fatAnt)}
+                  </span>
+                </>
               )}
               <span className="block">Ticket médio: {formatBRL(ticketMedio)}</span>
               {variacaoAno !== null && (
                 <span className={`block ${variacaoAno >= 0 ? 'text-success' : 'text-danger'}`}>
                   {variacaoAno >= 0 ? '▲' : '▼'} {Math.abs(variacaoAno).toFixed(1)}% vs. {mm}/{anoAnt}
+                </span>
+              )}
+              {ehMesAtual && diaAtual > 0 && (
+                <span className="block text-slate-500">
+                  No ritmo ({diaAtual}/{diasNoMes} dias), fecha em ~{formatBRL(projecao)}
                 </span>
               )}
             </>
