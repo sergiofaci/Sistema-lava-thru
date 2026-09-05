@@ -65,7 +65,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const pm = pd.getMonth() + 1
   const pmes = `${py}-${String(pm).padStart(2, '0')}`
   const prevInicio = `${pmes}-01`
-  const prevFim = `${pmes}-${String(new Date(py, pm, 0).getDate()).padStart(2, '0')}`
+
+  // Comparação "mesmo período": se o mês exibido é o corrente, corta o mês
+  // anterior no mesmo dia de hoje (ex.: dia 10 × dia 10). Meses fechados
+  // comparam mês cheio × mês cheio.
+  const ehMesAtual = mes === hoje.slice(0, 7)
+  const diasNoMes = new Date(Y, M, 0).getDate()
+  const diaAtual = ehMesAtual ? Number(hoje.slice(8, 10)) : diasNoMes
+  const diasPrevMes = new Date(py, pm, 0).getDate()
+  const prevFimCorte = `${pmes}-${String(Math.min(diaAtual, diasPrevMes)).padStart(2, '0')}`
 
   // Janela de 6 meses (incluindo o mês atual) para o gráfico de evolução.
   const trendStart = new Date(Y, M - 6, 1)
@@ -118,7 +126,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .from('fechamentos_caixa')
         .select('sistema_dinheiro, sistema_pix, sistema_credito, sistema_debito, sistema_voucher, sistema_empresarial')
         .gte('data', prevInicio)
-        .lte('data', prevFim),
+        .lte('data', prevFimCorte),
     ),
     aplicarUnidade(
       supabase
@@ -364,9 +372,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   )
   const metaMes = metaDerivada > 0 ? metaDerivada : metaManual
   const pctMeta = metaMes > 0 ? (fatMes / metaMes) * 100 : null
-  const ehMesAtual = mes === hoje.slice(0, 7)
-  const diasNoMes = new Date(Y, M, 0).getDate()
-  const diaAtual = ehMesAtual ? Number(hoje.slice(8, 10)) : diasNoMes
   const projecao = ehMesAtual && diaAtual > 0 ? round2((fatMes / diaAtual) * diasNoMes) : fatMes
   const pctProjMeta = metaMes > 0 ? (projecao / metaMes) * 100 : null
 
@@ -430,7 +435,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <span>sem base do mês anterior</span>
               ) : (
                 <span className={variacao >= 0 ? 'text-success' : 'text-danger'}>
-                  {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}% vs. mês anterior
+                  {variacao >= 0 ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}%{' '}
+                  {ehMesAtual ? `vs. mesmo período (até dia ${diaAtual})` : 'vs. mês anterior'}
                 </span>
               )}
               <span className="block">Ticket médio: {formatBRL(ticketMedio)}</span>
