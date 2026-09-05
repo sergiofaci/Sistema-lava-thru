@@ -358,7 +358,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const resultado = round2(fatMes - despesasMes)
   const margem = fatMes > 0 ? (resultado / fatMes) * 100 : null
-  const ticketMedio = totalLavMes > 0 ? round2(fatMes / totalLavMes) : 0
+  // Ticket médio de avulsas = faturamento do caixa ÷ lavagens avulsas (exclui assinantes).
+  const ehAssinatura = (nome: string) => nome.toLowerCase().includes('assinatura')
+  const lavAssinMes = lavagens.filter((l) => ehAssinatura(l.nome)).reduce((s, l) => s + l.mes, 0)
+  const lavAvulsaMes = totalLavMes - lavAssinMes
+  const ticketMedio = lavAvulsaMes > 0 ? round2(fatMes / lavAvulsaMes) : 0
+  // Ticket médio de assinantes = receita das assinaturas (histórico) ÷ utilizações no caixa.
+  const receitaAssinMes = round2(histAssin.get(mes) ?? 0)
+  const ticketAssin = lavAssinMes > 0 ? round2(receitaAssinMes / lavAssinMes) : 0
 
   // Meta e projeção do mês. Prioriza a meta por item (Σ qtd × preço); se
   // não houver, usa a meta manual (tabela metas).
@@ -444,7 +451,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   </span>
                 </>
               )}
-              <span className="block">Ticket médio: {formatBRL(ticketMedio)}</span>
+              <span className="block">Ticket médio (avulsas): {formatBRL(ticketMedio)}</span>
+              {ticketAssin > 0 && (
+                <span className="block">Ticket médio (assinantes): {formatBRL(ticketAssin)}</span>
+              )}
               {variacaoAno !== null && (
                 <span className={`block ${variacaoAno >= 0 ? 'text-success' : 'text-danger'}`}>
                   {variacaoAno >= 0 ? '▲' : '▼'} {Math.abs(variacaoAno).toFixed(1)}% vs. {mm}/{anoAnt}
