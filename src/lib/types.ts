@@ -28,6 +28,7 @@ export const ORIGENS_PAGAMENTO = [
   'Cartão Empresa',
   'Conta Bancária Sicoob',
   'Conta Bancária Itaú',
+  'Conta Bancária Conta Azul',
   'Cartão PF',
 ] as const
 
