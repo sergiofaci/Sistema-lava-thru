@@ -31,3 +31,18 @@ body {
   color: #0f172a;
   font-family: var(--font-sans);
 }
+
+/* Impressão / PDF: só o conteúdo principal */
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  main {
+    padding: 0 !important;
+  }
+}
